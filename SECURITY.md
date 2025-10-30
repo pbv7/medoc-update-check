@@ -20,7 +20,8 @@ pwsh -Command '$PSVersionTable.PSVersion'
 
 ### Installation
 
-Follow Microsoft's official [PowerShell Installation Guide](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows).
+Follow Microsoft's official
+[PowerShell Installation Guide](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows).
 
 ### Event Log Monitoring
 
@@ -42,7 +43,10 @@ See [TESTING.md - PowerShell 7+ Event Log Cmdlet Changes](TESTING.md#powershell-
 
 ## Secure Credential Storage (SYSTEM User Compatible)
 
-**IMPORTANT:** Credentials (BotToken, ChatId) should NEVER be stored in plain text in config files. This project uses CMS (Cryptographic Message Syntax) encryption with a self-signed LocalMachine certificate for secure storage compatible with Task Scheduler running as SYSTEM user.
+**IMPORTANT:** Credentials (BotToken, ChatId) should NEVER be stored in plain text in config
+files. This project uses CMS (Cryptographic Message Syntax) encryption with a self-signed
+LocalMachine certificate for secure storage compatible with Task Scheduler running as SYSTEM
+user.
 
 ### How It Works
 
@@ -164,7 +168,9 @@ See [TESTING.md - PowerShell 7+ Event Log Cmdlet Changes](TESTING.md#powershell-
 | **Administrative tampering** | ⚠️ Not protected | Requires trust model acceptance |
 | **Full machine compromise** | ⚠️ Not protected | Requires physical security |
 
-**Conclusion:** CMS encryption provides industry-standard security sufficient for server-side credential storage in enterprise environments where physical and administrative security are assumed.
+**Conclusion:** CMS encryption provides industry-standard security sufficient for server-side
+credential storage in enterprise environments where physical and administrative security are
+assumed.
 
 ### Certificate Lifecycle Management
 
@@ -255,7 +261,8 @@ When the project adds support for remote log file monitoring or multi-server sce
 
 ## Server Name Configuration Strategy
 
-ServerName is used in Telegram and Event Log messages to identify which M.E.Doc server sent the notification. The script uses intelligent detection with multiple strategies.
+ServerName is used in Telegram and Event Log messages to identify which M.E.Doc server sent
+the notification. The script uses intelligent detection with multiple strategies.
 
 ### Strategy 1: Default Auto-Detection (Recommended)
 
@@ -341,11 +348,13 @@ $serverName = "CustomName-Office1"
 
 ## Windows-1251 Encoding (Cyrillic Support)
 
-This project handles M.E.Doc log files using Windows-1251 encoding (CP1251) for Cyrillic characters. Understanding this is important for troubleshooting and testing.
+This project handles M.E.Doc log files using Windows-1251 encoding (CP1251) for Cyrillic
+characters. Understanding this is important for troubleshooting and testing.
 
 ### Why Windows-1251?
 
-M.E.Doc is Ukrainian enterprise accounting software. Its log files use Windows-1251 encoding (not UTF-8) to properly represent Cyrillic (Ukrainian) text. Examples from logs:
+M.E.Doc is Ukrainian enterprise accounting software. Its log files use Windows-1251 encoding
+(not UTF-8) to properly represent Cyrillic (Ukrainian) text. Examples from logs:
 
 - `Завантаження оновлення` (Update download)
 - `Помилка при оновленні` (Update error)
@@ -507,7 +516,10 @@ BotToken = "YOUR_BOT_TOKEN"  # INSECURE!
 
 **What it is:** Unique identifier for the chat/channel to receive notifications
 
-**Why it's encrypted (PII):** Chat ID is Personally Identifiable Information because it uniquely identifies a person, organization, or group. Encrypting it alongside the bot token protects against unauthorized access to sensitive communication channels.
+**Why it's encrypted (PII):** Chat ID is Personally Identifiable Information (PII) because it
+uniquely identifies a person, organization, or group receiving notifications. Encrypting it
+alongside the bot token (sensitive credential) protects against unauthorized access to
+sensitive communication channels.
 
 **Format:**
 
@@ -530,14 +542,17 @@ The **getUpdates API method** works for all types of chats (private, group, or c
 
 **For Channels (Advanced Alternative):**
 
-If you're having trouble with the API method for channels, you can also inspect the browser:
+If you're having trouble with the API method for channels, you can also inspect the
+browser:
 
 1. Open your channel in Telegram Web
 2. Check the URL: `https://web.telegram.org/k/?tgaddr=tg://resolve?domain=CHANNEL_NAME`
 3. Right-click → Inspect → Network tab
 4. Search network requests for `chat_id`
 
-**Note:** The API method (getUpdates) is more reliable and works universally for all chat types. Use the browser inspector only if the API method doesn't work for your specific channel.
+**Note:** The API method (getUpdates) is more reliable and works universally for all chat
+types. Use the browser inspector only if the API method doesn't work for your specific
+channel.
 
 **Where to put:** Use `Setup-Credentials.ps1` (NOT in Config.ps1)
 
@@ -644,7 +659,9 @@ icacls $path
 
 All actions are logged to Windows Event Log with specific Event IDs for easy monitoring and troubleshooting.
 
-The module uses a centralized `MedocEventId` enum (defined in `lib/MedocUpdateCheck.psm1`) to ensure consistency across all Event Log entries and function return values. This enum defines all possible event IDs and their meanings.
+The module uses a centralized `MedocEventId` enum (defined in `lib/MedocUpdateCheck.psm1`) to
+ensure consistency across all Event Log entries and function return values. This enum defines
+all possible event IDs and their meanings.
 
 ### Event ID Reference
 
