@@ -585,7 +585,53 @@ Invoke-Pester -Path "tests/MedocUpdateCheck.Tests.ps1" `
 
 ### Test Coverage
 
-View which tests passed/failed:
+#### Using Run-Tests.ps1 Test Runner (Recommended)
+
+The project includes a test runner script that matches CI/CD behavior with coverage reporting:
+
+**Basic test run:**
+
+```powershell
+./tests/Run-Tests.ps1
+```
+
+**With code coverage measurement:**
+
+```powershell
+./tests/Run-Tests.ps1 -Coverage
+```
+
+This displays:
+
+- Test summary (Passed/Failed/Skipped counts)
+- Code coverage percentage for production code (lib/ + Run.ps1)
+- Color-coded coverage status:
+  - 🟢 Green: 80%+ (excellent)
+  - 🟡 Yellow: 60-79% (good)
+  - 🔴 Red: <60% (needs improvement)
+
+**With coverage and verbose output:**
+
+```powershell
+./tests/Run-Tests.ps1 -Coverage -Verbose
+```
+
+**Filter tests and measure coverage:**
+
+```powershell
+./tests/Run-Tests.ps1 -Coverage -Filter "*UpdateOperation*"
+```
+
+**Parameters:**
+
+- `-Coverage` - Enable code coverage measurement
+- `-Verbose` - Show detailed test output
+- `-Filter "pattern"` - Run only tests matching pattern
+- `-OutputFormat Detailed|Summary|None` - Control output level
+
+#### Direct Pester Invocation
+
+For advanced usage, call Pester directly:
 
 ```powershell
 $results = Invoke-Pester -Path "tests/MedocUpdateCheck.Tests.ps1" -PassThru

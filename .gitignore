@@ -44,6 +44,10 @@ obj/
 # Test runtime artifacts (checkpoint files generated during test execution)
 tests/test-data/**/checkpoint-*.txt
 
+# Local coverage reports (generated locally, not committed)
+coverage-local.xml
+tests/coverage-local.xml
+
 # Allow committed test fixtures
 !tests/test-data/**/*.log
 !tests/test-data/**/Planner.log
