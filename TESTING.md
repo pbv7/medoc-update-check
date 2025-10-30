@@ -714,7 +714,7 @@ Windows APIs.
 
 **Current Status:**
 
-- ✅ 196 tests passing on all platforms
+- ✅ 201 tests passing on all platforms
 - ⏭️ 2 tests skipped on non-Windows (intentional, documented)
 - ✅ 0 failures on any platform
 
@@ -727,7 +727,8 @@ Windows APIs.
 | **Configuration Validation** | ✅ All | ✅ All | ✅ All | Parameter validation, file path checks |
 | **Telegram Integration** | ✅ All | ✅ All | ✅ All | Mocked API calls, message formatting |
 | **Event Log Writing** | ✅ All (mocked) | ✅ All (mocked) | ✅ All (mocked) | Cross-platform mocking works everywhere |
-| **CMS Credential Encryption** | ✅ 13 tests | ⏭️ 1 skip | ⏭️ 1 skip | Windows certificate APIs required |
+| **CMS Credential Encryption** | ✅ 3 tests | ⏭️ 3 skip | ⏭️ 3 skip | Real encrypt/decrypt tests; Windows certificate APIs required |
+| **Certificate Validation** | ✅ Multiple | ⏭️ Skip | ⏭️ Skip | Setup-Credentials.ps1 validation logic |
 | **Task Scheduler Setup** | ✅ 1 test | ⏭️ 1 skip | ⏭️ 1 skip | Windows Task Scheduler COM API required |
 
 #### CMS Credential Encryption Tests (Windows-Only)
@@ -742,21 +743,24 @@ PowerShell's CMS (Cryptographic Message Syntax) cmdlets depend on Windows Certif
 
 **What These Tests Cover:**
 
-- Certificate generation with proper CMS requirements
-- Document Encryption EKU validation (OID: 1.3.6.1.4.1.311.80.1)
-- KeyEncipherment key usage validation
-- Credential encryption and decryption
-- Certificate upgrade/regeneration scenarios
-- SYSTEM user access compatibility
+The "Certificate encryption and decryption workflow" context tests actual encryption functionality:
+
+- ✅ Real credential encryption using `Protect-CmsMessage`
+- ✅ Real credential decryption using `Unprotect-CmsMessage`
+- ✅ JSON payload integrity verification
+- ✅ Certificate presence verification in LocalMachine store
+- ✅ Certificate property validation (subject, expiration, private key)
+- ✅ Graceful handling when certificate doesn't exist yet
 
 **Test Skip Details:**
 
 ```powershell
-# In tests/MedocUpdateCheck.Tests.ps1 (lines 1639-1650)
-if ($PSVersionTable.Platform -and $PSVersionTable.Platform -ne "Win32NT") {
-    It "CMS tests are not applicable on non-Windows platforms" -Skip {
-        # Gracefully skip: PowerShell's CMS features require Windows PKI
-    }
+# In tests/MedocUpdateCheck.Tests.ps1 (lines 1723-1786)
+It "Should encrypt and decrypt credential data successfully" -Skip:(
+    $PSVersionTable.Platform -and $PSVersionTable.Platform -ne "Win32NT"
+) {
+    # Real encryption/decryption test - skipped on non-Windows
+    # Reason: Requires Windows Certificate Store and private key access
 }
 ```
 

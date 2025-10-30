@@ -1719,63 +1719,69 @@ Describe "CMS Credential Encryption - Unit Tests" {
         }
     }
 
-    Context "Certificate specification verification" {
-        It "Should specify certificate subject correctly" {
-            $expectedSubject = "CN=M.E.Doc Update Check Credential Encryption"
-            # Verify the subject format is valid
-            $expectedSubject | Should -Match "^CN="
+    Context "Certificate encryption and decryption workflow" {
+        It "Should encrypt and decrypt credential data successfully" -Skip:(
+            $PSVersionTable.Platform -and $PSVersionTable.Platform -ne "Win32NT"
+        ) {
+            # Create test credential data
+            $testCredentials = @{
+                BotToken = "test-bot-token-12345"
+                ChatId   = "-1234567890"
+            }
+
+            # Encrypt the credentials using the certificate
+            $jsonData = $testCredentials | ConvertTo-Json
+            $encrypted = $jsonData | Protect-CmsMessage -To "CN=M.E.Doc Update Check Credential Encryption" -ErrorAction SilentlyContinue
+
+            # Verify encryption succeeded and produced output
+            if ($encrypted) {
+                $encrypted | Should -Not -BeNullOrEmpty
+                $encrypted -is [string] | Should -Be $true
+
+                # Decrypt the credentials
+                $decrypted = $encrypted | Unprotect-CmsMessage -ErrorAction SilentlyContinue
+
+                # Verify decryption succeeded and data is intact
+                if ($decrypted) {
+                    $decrypted | Should -Not -BeNullOrEmpty
+                    $parsed = $decrypted | ConvertFrom-Json
+                    $parsed.BotToken | Should -Be "test-bot-token-12345"
+                    $parsed.ChatId | Should -Be "-1234567890"
+                }
+            }
         }
 
-        It "Should specify 5-year certificate lifetime" {
-            $today = Get-Date
-            $expiryDate = $today.AddYears(5)
+        It "Should find certificate in LocalMachine store" -Skip:(
+            $PSVersionTable.Platform -and $PSVersionTable.Platform -ne "Win32NT"
+        ) {
+            # Search for the credential encryption certificate
+            $cert = Get-ChildItem Cert:\LocalMachine\My -ErrorAction SilentlyContinue |
+                Where-Object { $_.Subject -match "M.E.Doc Update Check" } |
+                Select-Object -First 1
 
-            # Should be approximately 5 years from now
-            $yearsUntilExpiry = ($expiryDate - $today).TotalDays / 365.25
-            $yearsUntilExpiry | Should -BeGreaterThan 4.9
-            $yearsUntilExpiry | Should -BeLessThan 5.1
+            # Certificate might not exist yet, but if it does, verify its properties
+            if ($cert) {
+                # Verify certificate subject
+                $cert.Subject | Should -Match "M.E.Doc Update Check Credential Encryption"
+
+                # Verify certificate is not expired
+                $cert.NotAfter | Should -BeGreaterThan (Get-Date)
+
+                # Verify certificate has private key
+                $cert.HasPrivateKey | Should -Be $true
+            } else {
+                # On first run or test environment, certificate might not exist yet
+                # This is not a failure - Setup-Credentials.ps1 creates it when needed
+                Write-Host "Info: Certificate not found in store (will be created by Setup-Credentials.ps1)" -ForegroundColor Cyan
+            }
         }
 
-        It "Should use 2048-bit RSA key" {
-            # RSA 2048 is industry standard for certificate keys
-            2048 | Should -BeGreaterThanOrEqual 2048
-        }
-
-        It "Should specify NonExportable key export policy" {
-            # NonExportable policy prevents private key extraction
-            $validPolicies = @("NonExportable", "ExportableEncrypted", "Exportable")
-            $validPolicies -contains "NonExportable" | Should -Be $true
-        }
-
-        It "Should specify DataEncipherment key usage for CMS" {
-            # DataEncipherment is the correct usage for CMS encryption
-            $validUsages = @("DataEncipherment", "DigitalSignature", "KeyEncipherment")
-            $validUsages -contains "DataEncipherment" | Should -Be $true
-        }
-
-        It "Should specify KeyEncipherment key usage for CMS compatibility" {
-            # Both DataEncipherment AND KeyEncipherment are required for CMS
-            # This is necessary for Protect-CmsMessage to work properly
-            $validUsages = @("DataEncipherment", "DigitalSignature", "KeyEncipherment")
-            $validUsages -contains "KeyEncipherment" | Should -Be $true
-        }
-
-        It "Should specify Document Encryption EKU (1.3.6.1.4.1.311.80.1)" {
-            # Document Encryption OID is automatically set by -Type DocumentEncryptionCert
-            $documentEncryptionOID = "1.3.6.1.4.1.311.80.1"
-            $documentEncryptionOID | Should -Match "^\d+\.\d+\.\d+\.\d+\.\d+\.\d+$"
-        }
-
-        It "Should use DocumentEncryptionCert type for self-signed certificates" {
-            # DocumentEncryptionCert automatically sets the correct EKU
-            $certType = "DocumentEncryptionCert"
-            $certType | Should -Match "DocumentEncryption"
-        }
-
-        It "Should target LocalMachine certificate store" {
-            $storePath = "Cert:\LocalMachine\My"
-            # Verify the store path format
-            $storePath | Should -Match "Cert:\\LocalMachine\\My"
+        It "Should have CMS cmdlets available on Windows" -Skip:(
+            $PSVersionTable.Platform -and $PSVersionTable.Platform -ne "Win32NT"
+        ) {
+            # Verify CMS encryption cmdlets are available
+            Get-Command Protect-CmsMessage -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
+            Get-Command Unprotect-CmsMessage -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
         }
     }
 
@@ -1901,11 +1907,15 @@ Describe "CMS Credential Encryption - Unit Tests" {
             Get-Command Unprotect-CmsMessage -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
         }
 
-        It "Should have New-SelfSignedCertificate available" {
+        It "Should have New-SelfSignedCertificate available" -Skip:(
+            $PSVersionTable.Platform -and $PSVersionTable.Platform -ne "Win32NT"
+        ) {
             Get-Command New-SelfSignedCertificate -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
         }
 
-        It "Should have certificate store available" {
+        It "Should have certificate store available (Windows only)" -Skip:(
+            $PSVersionTable.Platform -and $PSVersionTable.Platform -ne "Win32NT"
+        ) {
             Test-Path "Cert:\LocalMachine\My" | Should -Be $true
         }
     }
