@@ -2,90 +2,72 @@
 
 This document provides a step-by-step checklist for deploying M.E.Doc Update Check to production servers.
 
-## Getting the Code (No Git Required)
+**Related Documentation:**
 
-Most Windows servers don't have Git installed. Follow these steps to download the project as a ZIP file:
-
-### ☐ Step 0: Download from GitHub Release
-
-1. **Visit the GitHub latest release page:**
-   - Go to: [Latest Release](https://github.com/pbv7/medoc-update-check/releases/latest) (automatically redirects to newest version)
-
-2. **Download the source code ZIP:**
-   - Find the latest release (e.g., v1.0.0)
-   - Under "Assets" section, click **`Source code (zip)`**
-   - File will download as: `medoc-update-check-v1.0.0.zip`
-
-3. **Extract on your deployment machine or directly on target server:**
-
-   **Option A: On your local machine (then copy to server):**
-
-   ```powershell
-   # Navigate to Downloads folder
-   cd $env:USERPROFILE\Downloads
-
-   # Extract the ZIP file
-   Expand-Archive -Path "medoc-update-check-v1.0.0.zip" -DestinationPath "C:\Temp\medoc-update-check"
-
-   # Folder structure after extraction:
-   C:\Temp\medoc-update-check\medoc-update-check-v1.0.0\
-   ├── Run.ps1
-   ├── lib\
-   ├── utils\
-   ├── configs\
-   ├── DEPLOYMENT.md
-   └── ... (other files)
-   ```
-
-   **Option B: Directly on target server (if you can copy file there first):**
-
-   ```powershell
-   # On target server, as Administrator
-   cd C:\Temp
-
-   # Extract ZIP file
-   Expand-Archive -Path "medoc-update-check-v1.0.0.zip" -DestinationPath "."
-
-   # Rename extracted folder to remove version suffix
-   Rename-Item "medoc-update-check-v1.0.0" "MedocUpdateCheck"
-
-   # Move to final location
-   Move-Item "MedocUpdateCheck" "C:\Script\MedocUpdateCheck"
-   ```
-
-4. **Verify extraction:**
-   - ☐ `Run.ps1` exists in root
-   - ☐ `lib\MedocUpdateCheck.psm1` exists
-   - ☐ `configs\Config.template.ps1` exists
-   - ☐ `utils\Setup-Credentials.ps1` exists
-   - ☐ `utils\Setup-ScheduledTask.ps1` exists
-
-### Alternative: Clone with Git (If Git is Installed)
-
-If you have Git available:
-
-```powershell
-cd C:\Script
-
-# Clone the repository
-git clone https://github.com/pbv7/medoc-update-check.git
-
-cd medoc-update-check
-
-# Checkout specific version (optional)
-git checkout v1.0.0
-```
+- **Quick overview?** See [README.md](README.md)
+- **Security & credentials details?** See [SECURITY.md](SECURITY.md)
+- **Testing & validation?** See [TESTING.md](TESTING.md)
+- **Troubleshooting?** See [README.md - Troubleshooting](README.md#troubleshooting) and [SECURITY.md - Event ID Reference](SECURITY.md#event-id-reference)
 
 ---
 
-## Pre-Deployment Preparation
+## 1. Quick Start: Getting the Code
 
-### ☐ 1. Telegram Bot Setup
+Choose one method to obtain the latest release:
 
-Complete these steps BEFORE deploying to any server.
+### Option A: Download Automatically (Recommended for Remote Servers)
+
+Run this on the target server to download and extract the latest release:
 
 ```powershell
-# Step 1: Create Telegram Bot
+# Choose location for operational scripts
+New-Item -ItemType Directory -Path 'C:\Apps' | Out-Null   # If missing
+Set-Location 'C:\Apps'
+
+# Download and extract latest release
+$release = Invoke-RestMethod -Uri 'https://api.github.com/repos/pbv7/medoc-update-check/releases/latest'
+$version = $release.tag_name
+$zipUrl = $release.zipball_url
+$zipName = "medoc-update-check-$version.zip"
+
+Invoke-WebRequest -Uri $zipUrl -OutFile $zipName
+Expand-Archive -Path $zipName -DestinationPath . -Force
+
+# Find extracted folder and rename it
+$extractedFolder = Get-ChildItem -Directory |
+    Where-Object { $_.Name -match 'pbv7-medoc-update-check' } |
+    Sort-Object -Property LastWriteTime -Descending |
+    Select-Object -First 1
+
+if ($extractedFolder) {
+    Move-Item -Path $extractedFolder.FullName -Destination "./medoc-update-check" -Force
+    Write-Host "✅ Extracted: $($extractedFolder.Name) → medoc-update-check"
+} else {
+    Write-Host "❌ Error: No extracted folder found"
+}
+
+# Cleanup zip file
+Remove-Item $zipName -Force
+```
+
+### Option B: Download Manually
+
+Visit [Latest Release page](https://github.com/pbv7/medoc-update-check/releases/latest), download the ZIP file, and extract manually.
+
+---
+
+## 2. Pre-Deployment Requirements
+
+**Complete these steps BEFORE deploying to any server.**
+
+### ☐ 2.1 Telegram Bot & Chat ID Setup
+
+You need a Telegram bot token and chat ID for notifications.
+
+#### Create Telegram Bot
+
+```powershell
+# Instructions:
 # 1. Open Telegram → Search for @BotFather
 # 2. Send: /newbot
 # 3. Follow prompts to create bot
@@ -93,58 +75,86 @@ Complete these steps BEFORE deploying to any server.
 # 5. Save to secure location (NOT in code or configs)
 ```
 
+#### Get Telegram Chat ID
+
+```powershell
+# Instructions:
+# 1. Send a test message to your bot
+# 2. Visit: https://api.telegram.org/bot{YOUR_BOT_TOKEN}/getUpdates
+# 3. Find: "chat":{"id":YOUR_CHAT_ID}
+# 4. Save Chat ID (positive for private, negative for channel)
+```
+
 **References:**
 
 - See [SECURITY.md - Telegram Bot Token](SECURITY.md#1-telegram-bot-token) for detailed instructions
 - See [README.md - Getting Telegram Credentials](README.md#getting-telegram-credentials) for visual guide
-
-### ☐ 2. Get Telegram Chat ID
-
-```powershell
-# Step 1: Send test message to bot
-# Step 2: Visit: https://api.telegram.org/bot{YOUR_BOT_TOKEN}/getUpdates
-# Step 3: Find: "chat":{"id":YOUR_CHAT_ID}
-# Step 4: Save Chat ID (positive for private, negative for channel)
-```
-
-**References:**
-
 - See [SECURITY.md - Telegram Chat ID](SECURITY.md#2-telegram-chat-id) for detailed instructions
 
-### ☐ 3. Prepare Deployment Environment
+### ☐ 2.2 Environment Checklist
 
-Prerequisites:
+Verify your environment meets requirements:
 
-- ☐ Windows Server with PowerShell 7.0 or later
-- ☐ Access to M.E.Doc log file (see below for local vs. network)
+- ☐ Windows Server (2016 or later)
+- ☐ PowerShell 7.0 or later installed
+
+**Check PowerShell version:**
+
+```powershell
+pwsh -Command '$PSVersionTable.PSVersion'
+# Expected output: 7.x or higher
+```
+
+If not installed, follow [Microsoft's Installation Guide](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows).
+
+- ☐ Access to M.E.Doc logs directory on target server
 - ☐ Network access to Telegram API (api.telegram.org)
 - ☐ Administrator access to target server (for setup only)
 
-**Task Scheduler Principal:**
+### ☐ 2.3 Task Scheduler Principal
 
-- **SYSTEM user** (Recommended for most deployments)
+For automated scheduling, the script runs as:
+
+- **SYSTEM user** (Recommended)
   - No credential management needed
   - Works for local log file access on the server
-  - Use: `.\Setup-ScheduledTask.ps1 -ConfigPath ...` (default)
+  - Highest privilege level for Task Scheduler
 
 ---
 
-## Single Server Deployment
+## 3. Single Server Deployment
+
+Follow these steps sequentially for each server.
 
 ### ☐ Step 1: Copy Project Files
 
+Get the code to the target server using one of these methods:
+
+#### Method A: From Local Machine via Network Share
+
+Remote deployment from your local machine:
+
 ```powershell
-# From your local machine or source server
+# From your local machine, copy to target server
 robocopy "C:\Source\MedocUpdateCheck" "\\TARGET_SERVER\C$\Script\MedocUpdateCheck" /E
 
-# Or manually copy the folder via RDP/File Explorer
+# Or use RDP/File Explorer to copy manually
 ```
 
-**Verify items:**
+#### Method B: Download on Target Server
+
+If you already downloaded on the target server (see Section 1, Option A):
+
+```powershell
+# If you already downloaded using Option A above, this step is complete
+# Verify files exist in C:\Apps\medoc-update-check
+```
+
+**Verify files copied correctly:**
 
 - ☐ `Run.ps1` exists
 - ☐ `lib\MedocUpdateCheck.psm1` exists
-- ☐ `configs\Config.template.ps1` exists (template with all options documented)
+- ☐ `configs\Config.template.ps1` exists
 - ☐ `utils\Setup-Credentials.ps1` exists
 - ☐ `utils\Setup-ScheduledTask.ps1` exists
 
@@ -154,11 +164,11 @@ robocopy "C:\Source\MedocUpdateCheck" "\\TARGET_SERVER\C$\Script\MedocUpdateChec
 
 ### ☐ Step 2: Setup Credentials Securely
 
-Run on the target server **as Administrator**:
+Run on the target server as Administrator:
 
 ```powershell
 # Open PowerShell as Administrator
-cd C:\Script\MedocUpdateCheck
+cd C:\Apps\medoc-update-check
 
 # Interactive mode (prompts for credentials)
 .\utils\Setup-Credentials.ps1
@@ -167,16 +177,14 @@ cd C:\Script\MedocUpdateCheck
 .\utils\Setup-Credentials.ps1 -BotToken "YOUR_BOT_TOKEN" -ChatId "YOUR_CHAT_ID"
 ```
 
-Setup verification:
-
-**Verify setup:**
+#### Verify Setup
 
 - ☐ Script completes without errors
 - ☐ Certificate created: `Cert:\LocalMachine\My` (CN=M.E.Doc Update Check Credential Encryption)
 - ☐ File created: `$env:ProgramData\MedocUpdateCheck\credentials\telegram.cms`
 - ☐ Output shows "✅ Credentials Setup Complete!"
 
-**What it does:**
+#### What It Does
 
 - ✅ Creates self-signed certificate in LocalMachine store (if missing)
 - ✅ Encrypts credentials with CMS using certificate public key
@@ -190,11 +198,14 @@ Setup verification:
 
 ### ☐ Step 3: Configure Server Settings
 
-Run on the target server **as Administrator**:
+Run on the target server as Administrator:
 
 Copy and customize the config template for your server:
 
 ```powershell
+# Change to the medoc-update-check folder
+cd C:\Apps\medoc-update-check
+
 # Copy the template using your server's hostname automatically
 # No need to manually type your server name - it uses $env:COMPUTERNAME
 cp configs\Config.template.ps1 "configs\Config-$env:COMPUTERNAME.ps1"
@@ -211,7 +222,7 @@ MedocLogsPath = "D:\MedocSRV\LOG"
 # DO NOT edit BotToken or ChatId here
 ```
 
-**How it works:**
+#### How It Works
 
 The `$env:COMPUTERNAME` variable automatically gets your server's hostname, so the config filename will match your server name:
 
@@ -221,13 +232,13 @@ The `$env:COMPUTERNAME` variable automatically gets your server's hostname, so t
 
 This automatically creates descriptive filenames that identify which config belongs to which server without manual typing.
 
-**Configuration verification:**
+#### Configuration Verification
 
 - ☐ MedocLogsPath is correct
 - ☐ Path is accessible from SYSTEM user context
 - ☐ File contains no plain text credentials
 
-**ServerName options:**
+#### ServerName Options
 
 - ☐ Auto-detect from `$env:COMPUTERNAME` (default)
 - ☐ Auto-detect from `$env:MEDOC_SERVER_NAME` if set
@@ -243,24 +254,24 @@ This automatically creates descriptive filenames that identify which config belo
 Run the script as Administrator to verify it works:
 
 ```powershell
-cd C:\Script\MedocUpdateCheck
+cd C:\Apps\medoc-update-check
 .\Run.ps1 -ConfigPath ".\configs\Config-$env:COMPUTERNAME.ps1"
 ```
 
-**Expected Results:**
+#### Expected Results
 
 - ☐ Script runs without errors
 - ☐ Telegram message received in your chat
 - ☐ Event Log entry created (Event ID 1000 = success, or 1001 for no update)
 
-**Troubleshooting steps:**
+#### Troubleshooting Steps
 
 - If no Telegram message: Check Event Log for errors (Event ID 1400-1401 for Telegram errors)
 - If credential error: Verify Setup-Credentials.ps1 completed successfully
 - For complete EventID reference, see [SECURITY.md - Event ID Reference](SECURITY.md#event-id-reference)
 - See [README.md - Troubleshooting](README.md#troubleshooting)
 
-**Verify Event Log:**
+#### Verify Event Log
 
 ```powershell
 # Check for successful message send (PowerShell 7+)
@@ -293,10 +304,10 @@ If not installed, follow [Microsoft's Installation Guide](https://learn.microsof
 The setup script will automatically detect PowerShell 7+ and create the task to use it. If
 PowerShell 7+ is not found, the script will fail with a clear error message.
 
-##### Setup Command
+#### Setup Command
 
 ```powershell
-cd C:\Script\MedocUpdateCheck
+cd C:\Apps\medoc-update-check
 
 # Automated setup (runs as SYSTEM user with highest privileges)
 .\utils\Setup-ScheduledTask.ps1 -ConfigPath ".\configs\Config-$env:COMPUTERNAME.ps1"
@@ -305,13 +316,13 @@ cd C:\Script\MedocUpdateCheck
 .\utils\Setup-ScheduledTask.ps1 -ConfigPath ".\configs\Config-$env:COMPUTERNAME.ps1" -ScheduleTime "14:30"
 ```
 
-##### Task Verification
+#### Task Verification
 
 - ☐ Output shows "✅ Task Scheduler Setup Complete!"
 - ☐ Task appears in Task Scheduler
 - ☐ Task is scheduled for correct time
 
-**Task details:**
+#### Task Details
 
 - ✅ Daily scheduled task
 - ✅ Runs at specified time (default: 08:00)
@@ -344,7 +355,7 @@ Get-WinEvent -FilterHashtable @{
 } -MaxEvents 3
 ```
 
-##### Example: Event ID 1000 (Successful Update)
+#### Example: Event ID 1000 (Successful Update)
 
 If an update WAS detected, you'll see Event ID 1000:
 
@@ -356,7 +367,7 @@ LevelDisplayName : Information
 Message      : Server=MY-MEDOC-SERVER | Status=UPDATE_OK | FromVersion=11.02.183 | ToVersion=11.02.184 | UpdateStarted=28.10.2025 05:15:23 | UpdateCompleted=28.10.2025 05:17:20 | Duration=97 | CheckTime=28.10.2025 08:05:23
 ```
 
-**Success Indicators:**
+#### Success Indicators
 
 - ☐ Task Scheduler task is created and configured
 - ☐ Event Log shows entry from M.E.Doc Update Check (any Event ID: 1000, 1001, 1002, etc.)
@@ -369,17 +380,17 @@ Message      : Server=MY-MEDOC-SERVER | Status=UPDATE_OK | FromVersion=11.02.183
 
 ---
 
-## Multiple Servers Deployment
+## 4. Multiple Servers Deployment
 
 ### ☐ Repeat Single Server Steps for Each Server
 
-Deployment steps for each server:
+For each additional server, repeat all steps from Section 3:
 
-1. ☐ Copy files to each server
-2. ☐ Run Setup-Credentials.ps1 on each server
-3. ☐ Copy Config.template.ps1 to Config-$env:COMPUTERNAME.ps1 (automatic) and customize on each
-4. ☐ Test manually on each server
-5. ☐ Create scheduled task on each server
+1. ☐ Copy files to the server
+2. ☐ Run Setup-Credentials.ps1 on the server
+3. ☐ Create and customize Config file (automatic naming with `$env:COMPUTERNAME`)
+4. ☐ Test manually on the server
+5. ☐ Create scheduled task on the server
 
 ### ☐ Optional: Stagger Execution Times
 
@@ -402,7 +413,7 @@ If monitoring multiple servers, stagger task execution to avoid simultaneous API
 
 ---
 
-## Ongoing Maintenance
+## 5. Post-Deployment Monitoring
 
 ### ☐ Daily: Monitor Telegram Messages
 
@@ -414,7 +425,7 @@ Daily checks:
 
 ### ☐ Weekly: Check Event Log
 
-**PowerShell 7+ (Required for this project):**
+Review recent events from all monitored servers:
 
 ```powershell
 # Get all events from last 7 days
@@ -435,15 +446,16 @@ Get-WinEvent -FilterHashtable @{
 
 For detailed Event Log query guidance, see [TESTING.md - Event Log Test](TESTING.md#7-event-log-test).
 
-**Expected Results:**
+#### What to Look For
 
 - ☐ Event ID 1000 appears regularly (all verification flags confirmed)
-- ☐ No Event IDs 1002-1005 errors (Telegram, checkpoint, config issues)
-- ☐ No Event IDs 1006, 1010-1013 errors (directory, flag validation issues)
-- ☐ Checkpoint file updated in ProgramData regularly
+- ☐ No error Event IDs in unexpected patterns
+- ☐ Checkpoint files updated regularly in ProgramData
 - ☐ See [SECURITY.md - Event ID Reference](SECURITY.md#event-id-reference) for complete monitoring strategy
 
 ### ☐ Monthly: Review Configuration
+
+Verify everything is still configured correctly:
 
 ```powershell
 # Verify credentials file still exists (CMS encrypted)
@@ -455,7 +467,7 @@ Get-Item "$env:ProgramData\MedocUpdateCheck\checkpoints\last_run_*"
 
 ### ☐ Quarterly: Test Failure Scenarios
 
-Failure scenario tests:
+Verify alerting works by testing failure conditions:
 
 - ☐ Temporarily stop M.E.Doc service → verify error notification
 - ☐ Block Telegram API → verify error logged
@@ -485,81 +497,16 @@ If bot token needs rotation:
 
 ---
 
-## Documentation References
+## 6. Reference Sections
 
-| Document | Purpose | Link |
-|---|---|---|
-| **README.md** | Quick start and basic configuration | [Full deployment guide](README.md) |
-| **SECURITY.md** | Credential management and security | [Security procedures](SECURITY.md) |
-| **TESTING.md** | Testing procedures and validation | [Testing guide](TESTING.md) |
-| **CONTRIBUTING.md** | Code standards for developers | [Contributing guide](CONTRIBUTING.md) |
-| **AGENTS.md** | AI agent instructions | [Agent guide](AGENTS.md) |
+### Exit Codes for Task Scheduler Alerts
 
----
+`Run.ps1` returns distinct exit codes for monitoring and automation:
 
-## Troubleshooting Quick Links
-
-| Problem | Reference |
-|---|---|
-| No Telegram messages | [README.md - No Messages in Telegram](README.md#no-messages-in-telegram) |
-| Script won't run from Task Scheduler | [README.md - Script Won't Run from Task Scheduler](README.md#script-wont-run-from-task-scheduler) |
-| Wrong update status reported | [README.md - Wrong Update Status Reported](README.md#wrong-update-status-reported) |
-| Module load errors | [README.md - Module Load Errors](README.md#module-load-errors) |
-| Credential errors | [SECURITY.md - Sensitive Data Status](SECURITY.md#sensitive-data-status) |
-
----
-
-## Deployment Success Checklist
-
-### ✅ All Tasks Complete When
-
-Completion checklist:
-
-- ☐ All pre-deployment steps completed (Telegram bot, chat ID)
-- ☐ Files copied to server
-- ☐ Credentials setup completed and verified
-- ☐ Configuration file updated with correct paths
-- ☐ Manual test successful (Telegram message received)
-- ☐ Scheduled task created and configured
-- ☐ Final verification passed
-- ☐ Event Log shows Event ID 1000 (success)
-
-### ✅ Ready for Production When
-
-Production readiness checklist:
-
-- ☐ 3 consecutive daily runs with successful messages
-- ☐ No errors in Event Log
-- ☐ Checkpoint files auto-created in ProgramData
-- ☐ Server name displays correctly in Telegram messages
-- ☐ Update detection working (verified with real M.E.Doc update)
-
----
-
-## Support & Questions
-
-For questions about specific steps, refer to:
-
-- **Installation issues**: See [README.md - Quick Start](README.md#quick-start)
-- **Security concerns**: See [SECURITY.md](SECURITY.md)
-- **Credential problems**: See [SECURITY.md - Credentials You Need to Provide](SECURITY.md#credentials-you-need-to-provide)
-- **Testing & validation**: See [TESTING.md](TESTING.md)
-- **API/Event Log details**: See [README.md - Error Handling](README.md#error-handling)
-
----
-
-**Authors:** See [README.md](README.md#authors) for list of authors and contributors
-**License:** See [LICENSE](LICENSE) file for details
-**Note:** For release versions and history, check git tags: `git tag -l` or `git describe --tags`
-
-### Exit Codes for Scheduling/Monitoring
-
-`Run.ps1` returns distinct exit codes for operators to configure Task Scheduler alerts:
-
-**Exit Code Reference:**
+#### Exit Code Reference
 
 - **0** — Update check completed normally (Success or NoUpdate)
-  - Routine operation, no action required by operator
+  - Routine operation, no action required
   - Logs written to Event Log with info level
 
 - **1** — Operational or configuration error
@@ -574,9 +521,70 @@ For questions about specific steps, refer to:
   - Critical condition requiring immediate investigation
   - May indicate incomplete update or infrastructure issue
 
-**Recommended alerting strategy:**
+#### Recommended Alerting Strategy
 
 - Configure Task Scheduler to alert/restart on exit codes 1 and 2
 - Exit code 0 is expected for normal operations (Success or NoUpdate)
 - See [README.md - Exit Codes](README.md#exit-codes) for user-focused documentation
 - For full API details, see `Get-ExitCodeForOutcome` in [lib/MedocUpdateCheck.psm1](lib/MedocUpdateCheck.psm1)
+
+### Troubleshooting Quick Links
+
+| Problem | Reference |
+|---|---|
+| No Telegram messages | [README.md - No Messages in Telegram](README.md#no-messages-in-telegram) |
+| Script won't run from Task Scheduler | [README.md - Script Won't Run from Task Scheduler](README.md#script-wont-run-from-task-scheduler) |
+| Wrong update status reported | [README.md - Wrong Update Status Reported](README.md#wrong-update-status-reported) |
+| Module load errors | [README.md - Module Load Errors](README.md#module-load-errors) |
+| Credential errors | [SECURITY.md - Sensitive Data Status](SECURITY.md#sensitive-data-status) |
+
+### Documentation Map
+
+| Document | Purpose | Link |
+|---|---|---|
+| **README.md** | Quick start and basic configuration | [Full deployment guide](README.md) |
+| **SECURITY.md** | Credential management and security | [Security procedures](SECURITY.md) |
+| **TESTING.md** | Testing procedures and validation | [Testing guide](TESTING.md) |
+| **CONTRIBUTING.md** | Code standards for developers | [Contributing guide](CONTRIBUTING.md) |
+| **AGENTS.md** | AI agent instructions | [Agent guide](AGENTS.md) |
+
+### Deployment Success Checklist
+
+#### All Tasks Complete When
+
+- ☐ All pre-deployment steps completed (Telegram bot, chat ID)
+- ☐ Files copied to server
+- ☐ Credentials setup completed and verified
+- ☐ Configuration file updated with correct paths
+- ☐ Manual test successful (Telegram message received)
+- ☐ Scheduled task created and configured
+- ☐ Final verification passed
+- ☐ Event Log shows Event ID 1000 (success)
+
+#### Ready for Production When
+
+- ☐ 3 consecutive daily runs with successful messages
+- ☐ No errors in Event Log
+- ☐ Checkpoint files auto-created in ProgramData
+- ☐ Server name displays correctly in Telegram messages
+- ☐ Update detection working (verified with real M.E.Doc update)
+
+---
+
+## Support & Questions
+
+For help with specific issues, refer to:
+
+- **Installation issues**: See [README.md - Quick Start](README.md#quick-start)
+- **Security concerns**: See [SECURITY.md](SECURITY.md)
+- **Credential problems**: See [SECURITY.md - Credentials You Need to Provide](SECURITY.md#credentials-you-need-to-provide)
+- **Testing & validation**: See [TESTING.md](TESTING.md)
+- **API/Event Log details**: See [README.md - Error Handling](README.md#error-handling)
+
+---
+
+**Authors:** See [README.md](README.md#authors) for list of authors and contributors
+
+**License:** See [LICENSE](LICENSE) file for details
+
+**Note:** For release versions and history, check git tags: `git tag -l` or `git describe --tags`

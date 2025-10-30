@@ -85,14 +85,15 @@ MedocUpdateCheck/
 
 ## Quick Start
 
-### 1. Copy Folder to Server
+For complete step-by-step deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
-```powershell
-# Copy entire folder to target server
-robocopy "C:\Source\MedocUpdateCheck" "\\YOUR_SERVER_NAME\C$\Script\MedocUpdateCheck" /E
+### 1. Get the Code
 
-# Or manually copy the folder
-```
+Choose one method:
+
+- **Automatic download on target server:** Use the API-based approach in [DEPLOYMENT.md - Section 1, Option A](DEPLOYMENT.md#option-a-download-automatically-recommended-for-remote-servers)
+- **Manual download:** Download from [Latest Release](https://github.com/pbv7/medoc-update-check/releases/latest)
+- **Copy from local machine:** Use robocopy or RDP file transfer
 
 ### 2. Setup Credentials (SYSTEM User Compatible)
 
@@ -103,7 +104,7 @@ certificate and can be read by SYSTEM user in Task Scheduler.
 Run as Administrator on the target server:
 
 ```powershell
-cd C:\Script\MedocUpdateCheck
+cd C:\Apps\medoc-update-check
 .\utils\Setup-Credentials.ps1
 ```
 
@@ -250,6 +251,8 @@ This ensures ServerName can contain special characters without causing file syst
 
 ## Getting Telegram Credentials
 
+For comprehensive instructions on obtaining and securely storing Telegram credentials, see [SECURITY.md - Credentials You Need to Provide](SECURITY.md#credentials-you-need-to-provide).
+
 ### 1. Create Bot with BotFather
 
 - Open Telegram and find [@BotFather](https://t.me/botfather)
@@ -273,6 +276,8 @@ This ensures ServerName can contain special characters without causing file syst
 - Channel ID format: negative number (e.g., `-1002825825746`)
 - Copy the chat ID from response and use in Config.ps1
 
+**Next:** Use `Setup-Credentials.ps1` to securely encrypt these values (see [SECURITY.md](SECURITY.md#secure-credential-storage-system-user-compatible))
+
 ## Error Handling
 
 ### Console Errors (when run manually)
@@ -285,15 +290,19 @@ This ensures ServerName can contain special characters without causing file syst
 .\Run.ps1 -ConfigPath ".\configs\Config-$env:COMPUTERNAME.ps1" -Verbose
 ```
 
-### Windows Event Viewer (when run from Task Scheduler)
+### Windows Event Log (when run from Task Scheduler)
+
+All actions are logged to Windows Event Log. View events in Event Viewer:
 
 ```text
 Event Viewer → Windows Logs → Application → Filter by Source: "M.E.Doc Update Check"
 ```
 
-**Event IDs:**
+**Event ID Reference:**
 
-All actions are logged to Windows Event Log with specific Event IDs organized by category:
+For complete Event ID reference with troubleshooting steps, see [SECURITY.md - Event ID Reference](SECURITY.md#event-id-reference).
+
+**Event ID Categories:**
 
 - **1000-1099** - Normal flow (success, no update)
 - **1100-1199** - Configuration errors (missing keys, invalid values)
@@ -303,9 +312,7 @@ All actions are logged to Windows Event Log with specific Event IDs organized by
 - **1500-1599** - Checkpoint/state persistence errors
 - **1900+** - Unexpected/general errors
 
-For complete Event ID reference with troubleshooting steps, see [SECURITY.md - Event ID Reference](SECURITY.md#event-id-reference).
-
-### PowerShell Query for Events
+### PowerShell Event Log Queries
 
 For comprehensive Event Log query examples (view recent, errors, specific dates, etc.), see [TESTING.md - Event Log Query Examples](TESTING.md#event-log-query-examples).
 

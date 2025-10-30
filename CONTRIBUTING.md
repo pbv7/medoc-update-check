@@ -1742,27 +1742,20 @@ git tag -l | grep v1.1.0  # Should be empty
 
 ### For Operators: How to Download Releases
 
-#### Option A: Via Git (Technical Users)
+Recommended: use the GitHub API approach in DEPLOYMENT.md for a quick,
+consistent setup. Other methods (manual ZIP, Git) are acceptable if your
+environment prefers them—just follow the validation steps afterward.
+
+- See DEPLOYMENT.md → "Section 1: Quick Start: Getting the Code".
+- Benefit: minimal steps to fetch the latest release directly on the server.
+
+For developers only (not for production operators):
 
 ```powershell
+# Development convenience only
 git clone https://github.com/pbv7/medoc-update-check.git
 cd medoc-update-check
 git checkout v1.0.0  # or any version
-```
-
-#### Option B: Via GitHub Releases Page
-
-1. Go to: [Releases](https://github.com/pbv7/medoc-update-check/releases)
-2. Select release or use [Latest](https://github.com/pbv7/medoc-update-check/releases/latest)
-3. Download source code ZIP
-4. Extract and follow [DEPLOYMENT.md](DEPLOYMENT.md)
-
-#### Option C: Via Latest Release URL
-
-Permanent redirect to latest version:
-
-```text
-https://github.com/pbv7/medoc-update-check/releases/latest
 ```
 
 ### When to Release
