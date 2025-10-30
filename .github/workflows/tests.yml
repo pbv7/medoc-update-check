@@ -82,6 +82,7 @@ jobs:
         # --- 1. Test sources ---
         # All your test scripts are inside /tests
         $config.Run.Path = 'tests'
+        $config.Run.PassThru = $true  # Return results object for exit code handling
 
         # --- 2. Enable code coverage ---
         $config.CodeCoverage.Enabled = $true
@@ -107,7 +108,7 @@ jobs:
         # --- 6. Run tests ---
         # Note: Pester 5.7.1 doesn't support CodeCoverage.Exclude
         # We only measure production code (lib, utils, Run.ps1) defined in Path above
-        $results = Invoke-Pester -Configuration $config -PassThru
+        $results = Invoke-Pester -Configuration $config
         exit $results.FailedCount
 
     - name: Publish Test Results
