@@ -1863,7 +1863,8 @@ Describe "CMS Credential Encryption - Unit Tests" {
             # 1. Not expiring soon (>= 30 days)
             # 2. Has Document Encryption EKU
             # 3. Has KeyEncipherment usage
-            $content | Should -Match "return \$cert"  # Should return existing cert if valid
+            # Pattern: Should return existing cert variable if all checks pass
+            $content | Should -Match 'return \$cert'
         }
     }
 
