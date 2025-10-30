@@ -1565,6 +1565,212 @@ For configuration:
 
 ---
 
+## Release Process for Maintainers
+
+This section describes how to create and publish new releases following semantic versioning.
+
+### Semantic Versioning
+
+Format: `MAJOR.MINOR.PATCH` (e.g., `v1.0.0`, `v1.2.3`)
+
+- **MAJOR**: Breaking changes to deployment or configuration
+- **MINOR**: New features, backward compatible
+- **PATCH**: Bug fixes, no new features
+
+### Pre-Release Checklist
+
+Before creating a release:
+
+```powershell
+# 1. All tests passing
+./tests/Run-Tests.ps1
+# Expected: 201 tests passing
+
+# 2. No uncommitted changes
+git status
+# Expected: "working tree clean"
+
+# 3. On main branch
+git branch
+# Expected: "* main"
+
+# 4. Up to date with remote
+git fetch origin
+git status
+# Expected: "Your branch is up to date"
+```
+
+**Verify:**
+
+- ☐ All tests passing (201+ expected)
+- ☐ Working tree clean
+- ☐ On main branch
+- ☐ Up to date with remote
+- ☐ GitHub Actions workflow successful
+
+### Step-by-Step Release Process
+
+#### Step 1: Create Annotated Git Tag
+
+```powershell
+$version = "v1.1.0"
+$message = @"
+Release $version: Brief description
+
+Changes:
+- Feature/fix 1
+- Feature/fix 2
+
+Quality:
+- All tests passing (201+ tests)
+- Code coverage maintained (75%+)
+- GitHub Actions CI/CD passing
+"@
+
+git tag -a $version -m $message
+```
+
+**Tag message guidelines:**
+
+- First line: `Release vX.Y.Z: Description`
+- List key changes (features, fixes)
+- Note quality metrics
+- Keep concise
+
+#### Step 2: Push Tag to GitHub
+
+```powershell
+git push origin $version
+```
+
+Verify tag was pushed:
+
+```powershell
+git tag -l | grep $version
+# Should show the version
+```
+
+#### Step 3: Create GitHub Release
+
+```powershell
+gh release create $version `
+  --title "$version: Title" `
+  --notes "Release notes text here"
+```
+
+**Release notes should include:**
+
+- What's new (features, improvements)
+- Bug fixes
+- Requirements
+- How to upgrade
+- Links to documentation
+
+**Example release notes:**
+
+```markdown
+## v1.1.0: Multi-Server Stagger Support
+
+### What's New
+- New -ScheduleTime parameter with validation
+- Improved Task Scheduler logging
+
+### Bug Fixes
+- Fixed incorrect Event ID logging
+
+### Requirements
+- PowerShell 7.0 or later
+- Windows Server with admin access
+
+### Upgrade
+1. Download latest release
+2. Follow [DEPLOYMENT.md](DEPLOYMENT.md)
+3. Test manually first
+
+### Documentation
+- [DEPLOYMENT.md](DEPLOYMENT.md) - Installation
+- [README.md](README.md) - Quick start
+- [SECURITY.md](SECURITY.md) - Credentials
+```
+
+#### Step 4: Verify Release on GitHub
+
+```powershell
+gh release view $version
+
+# Check it's published (not draft)
+# Check release notes visible
+# Check download links working
+```
+
+### Release Checklist
+
+- ☐ All tests passing locally
+- ☐ Annotated tag created with good message
+- ☐ Tag pushed to GitHub
+- ☐ GitHub release created
+- ☐ Release notes are comprehensive
+- ☐ Release marked as published (not draft)
+- ☐ GitHub Actions completed (check status)
+
+### Troubleshooting
+
+**Release created but tag not visible:**
+
+```powershell
+# Push all tags
+git push origin --tags
+
+# Verify
+git tag -l | grep <version>
+```
+
+**Need to delete/recreate release:**
+
+```powershell
+# Delete local tag
+git tag -d v1.1.0
+
+# Delete remote tag
+git push origin --delete v1.1.0
+
+# Verify deletion
+git tag -l | grep v1.1.0  # Should be empty
+
+# Then create release again
+```
+
+### For Operators: How to Download Releases
+
+#### Option A: Via Git (Technical Users)
+
+```powershell
+git clone https://github.com/pbv7/medoc-update-check.git
+cd medoc-update-check
+git checkout v1.0.0  # or any version
+```
+
+#### Option B: Via GitHub Releases Page
+
+1. Go to: [Releases](https://github.com/pbv7/medoc-update-check/releases)
+2. Select release or use [Latest](https://github.com/pbv7/medoc-update-check/releases/latest)
+3. Download source code ZIP
+4. Extract and follow [DEPLOYMENT.md](DEPLOYMENT.md)
+
+#### Option C: Via Latest Release URL
+
+Permanent redirect to latest version:
+
+```text
+https://github.com/pbv7/medoc-update-check/releases/latest
+```
+
+### When to Release
+
+- **PATCH** (v1.0.0 → v1.0.1): Bug fixes (as needed)
+- **MINOR** (v1.0.0 → v1.1.0): Features (monthly or as completed)
+- **MAJOR** (v1.0.0 → v2.0.0): Breaking changes (planned, infrequent)
+
 ## Getting Help
 
 - **Code Questions**: Refer to PowerShell Core docs
@@ -1572,6 +1778,7 @@ For configuration:
 - **Markdown Lint**: Check [markdownlint rules](https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md)
 - **Architecture Questions**: Review project [README.md](README.md) and this document
 - **Test Data**: See [TESTING.md - Test Data & Encoding](TESTING.md#test-data--encoding) for format documentation
+- **Release Process**: Refer to [Release Process for Maintainers](#release-process-for-maintainers) above
 
 ---
 
