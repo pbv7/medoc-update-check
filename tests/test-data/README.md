@@ -1,6 +1,8 @@
 # M.E.Doc Update Check - Test Data Directory
 
-This directory contains test log files for validating the M.E.Doc Update Check functionality. All files use **Windows-1251 encoding** (CP1251) to support Cyrillic characters in M.E.Doc logs.
+This directory contains test log files for validating the M.E.Doc Update Check functionality.
+All files use **Windows-1251 encoding** (CP1251) to support Cyrillic characters in M.E.Doc
+logs.
 
 ## Encoding Information
 
@@ -223,7 +225,11 @@ identified and reported with the dedicated `MultipleFlagsFailed` error code
 7. ✅ Wrong version - All flags present but version mismatch
 8. ✅ Multiple flags failed - Flags 1 & 2 missing simultaneously
 
-**EncodingError (EventId 1204):** Tested via direct function calls in unit tests rather than scenario files. The `Test-UpdateOperationSuccess` function includes try/catch error handling for encoding issues during log file reading. This is exercised in the validation workflow but not via dedicated test data file scenario due to PowerShell's transparent encoding handling.
+**EncodingError (EventId 1204):** Tested via direct function calls in unit tests rather than
+scenario files. The `Test-UpdateOperationSuccess` function includes try/catch error handling
+for encoding issues during log file reading. This is exercised in the validation workflow but
+not via dedicated test data file scenario due to PowerShell's transparent encoding
+handling.
 
 ---
 

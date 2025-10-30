@@ -290,7 +290,8 @@ pwsh -Command '$PSVersionTable.PSVersion'
 
 If not installed, follow [Microsoft's Installation Guide](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows).
 
-The setup script will automatically detect PowerShell 7+ and create the task to use it. If PowerShell 7+ is not found, the script will fail with a clear error message.
+The setup script will automatically detect PowerShell 7+ and create the task to use it. If
+PowerShell 7+ is not found, the script will fail with a clear error message.
 
 ##### Setup Command
 

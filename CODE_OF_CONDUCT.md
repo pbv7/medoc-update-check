@@ -4,7 +4,10 @@
 
 We are committed to providing a welcoming and inspiring community for all people who participate in this project.
 
-We value the participation of every member and want to ensure that every contributor has an enjoyable and fulfilling experience. Accordingly, everyone who participates in the M.E.Doc Update Status Check project is expected to show respect and courtesy to other community members at all times.
+We value the participation of every member and want to ensure that every contributor has an
+enjoyable and fulfilling experience. Accordingly, everyone who participates in the M.E.Doc
+Update Status Check project is expected to show respect and courtesy to other community
+members at all times.
 
 ## Our Standards
 
@@ -41,7 +44,9 @@ This Code of Conduct applies to all project spaces, including but not limited to
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by contacting the project maintainers. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by
+contacting the project maintainers. All complaints will be reviewed and investigated promptly
+and fairly.
 
 All project maintainers are obligated to respect the privacy and security of the reporter of any incident.
 

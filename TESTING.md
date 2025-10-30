@@ -23,7 +23,8 @@ This document describes how to test the M.E.Doc Update Check project, including 
 
 **For Contributors:**
 
-When testing changes: Always run tests on macOS/Linux (matches CI/CD) - `./tests/Run-Tests.ps1`. For Windows-specific code changes, test on actual Windows Server before submission.
+When testing changes: Always run tests on macOS/Linux (matches CI/CD) - `./tests/Run-Tests.ps1`.
+For Windows-specific code changes, test on actual Windows Server before submission.
 
 ---
 
@@ -210,7 +211,10 @@ Server=MY-MEDOC-SERVER | Status=NO_UPDATE | CheckTime=28.10.2025 12:33:45
 
 **Event ID Reference:**
 
-For the complete and authoritative Event ID reference table, see [SECURITY.md - Event ID Reference](SECURITY.md#event-id-reference). The Event ID enum is centralized in the codebase (`lib/MedocUpdateCheck.psm1`) to ensure consistency across all Event Log entries and function return values.
+For the complete and authoritative Event ID reference table, see
+[SECURITY.md - Event ID Reference](SECURITY.md#event-id-reference). The Event ID enum is
+centralized in the codebase (`lib/MedocUpdateCheck.psm1`) to ensure consistency across all
+Event Log entries and function return values.
 
 **Quick Reference for Common Events:**
 
@@ -509,11 +513,14 @@ The test file uses `using module "..\lib\MedocUpdateCheck.psm1"` at the top to i
 1. **Enum Type Safety** - Ensures the `MedocEventId` enum is available for type assertions in tests
 2. **Keeps Enums in Sync** - Tests automatically use the latest enum definitions from the module
 3. **Prevents Drift** - If EventIDs are added/changed in the module, tests fail immediately rather than silently using stale values
-4. **Single Source of Truth** - EventID definitions live in one place (the module), tests automatically reflect changes
+4. **Single Source of Truth** - EventID definitions live in one place (the module), tests
+   automatically reflect changes
 
 #### How It Works
 
-The `using module` directive (different from `Import-Module`) imports the module at **Pester compile time** before any tests run. This makes the `MedocEventId` enum type available for use throughout the test file:
+The `using module` directive (different from `Import-Module`) imports the module at **Pester
+compile time** before any tests run. This makes the `MedocEventId` enum type available for
+use throughout the test file:
 
 ```powershell
 # At the top of MedocUpdateCheck.Tests.ps1
@@ -532,7 +539,8 @@ The `Import-Module` in `BeforeAll` is separate and necessary for runtime functio
 - **If EventIDs change in the module:** All affected tests will fail during the run, preventing silent test invalidation
 - **If new EventIDs are added:** Tests can be written using the new values without manual synchronization
 
-**Don't optimize this away** - The duplicate `Import-Module` in `BeforeAll` is intentional (one for compile-time types via `using`, one for runtime module functions). Both are required.
+**Don't optimize this away** - The duplicate `Import-Module` in `BeforeAll` is intentional (one
+for compile-time types via `using`, one for runtime module functions). Both are required.
 
 ### Running All Tests
 
@@ -699,7 +707,10 @@ When adding tests that verify Event Log entries:
 
 #### About Platform-Specific Tests
 
-The project includes tests for Windows-only features that are intentionally skipped on macOS/Linux. This reflects the reality that while core update detection logic is cross-platform, some operational features (credential encryption, task scheduling) depend on Windows APIs.
+The project includes tests for Windows-only features that are intentionally skipped on
+macOS/Linux. This reflects the reality that while core update detection logic is
+cross-platform, some operational features (credential encryption, task scheduling) depend on
+Windows APIs.
 
 **Current Status:**
 
@@ -1555,7 +1566,9 @@ Server=MY-MEDOC-SERVER | Status=UPDATE_FAILED | FromVersion=11.02.185 | ToVersio
 
 ### Overview
 
-The checkpoint mechanism prevents duplicate Telegram notifications when running the update check multiple times per day. The function only sends notifications for updates detected *after* the last run.
+The checkpoint mechanism prevents duplicate Telegram notifications when running the update
+check multiple times per day. The function only sends notifications for updates detected
+*after* the last run.
 
 ### Checkpoint Mechanism
 

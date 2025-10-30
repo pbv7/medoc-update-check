@@ -33,7 +33,10 @@ If PowerShell 7+ is not found when running `Setup-ScheduledTask.ps1`, the script
 - ⚠️ Limited testing on Windows (production usage only on developer's servers)
 - ⚠️ Windows-specific features (Event Log, Task Scheduler) need broader user validation
 
-**If you use this on Windows servers:** Please report any issues you encounter. Windows-specific behavior (Event Log integration, Task Scheduler execution, SYSTEM user context, CMS certificate handling) may benefit from additional testing in your environment before wide deployment.
+**If you use this on Windows servers:** Please report any issues you encounter.
+Windows-specific behavior (Event Log integration, Task Scheduler execution, SYSTEM user
+context, CMS certificate handling) may benefit from additional testing in your environment
+before wide deployment.
 
 See [TESTING.md - Platform Support](TESTING.md) for detailed notes on cross-platform behavior.
 
@@ -93,7 +96,9 @@ robocopy "C:\Source\MedocUpdateCheck" "\\YOUR_SERVER_NAME\C$\Script\MedocUpdateC
 
 ### 2. Setup Credentials (SYSTEM User Compatible)
 
-**IMPORTANT:** Store sensitive credentials (BotToken, ChatId) securely. Credentials are encrypted with CMS (Cryptographic Message Syntax) using a self-signed LocalMachine certificate and can be read by SYSTEM user in Task Scheduler.
+**IMPORTANT:** Store sensitive credentials (BotToken, ChatId) securely. Credentials are
+encrypted with CMS (Cryptographic Message Syntax) using a self-signed LocalMachine
+certificate and can be read by SYSTEM user in Task Scheduler.
 
 Run as Administrator on the target server:
 
@@ -448,7 +453,9 @@ dd.MM.yy H:mm:ss.mmm XXXXXXXX LEVEL Message
 **Timestamp format:** 2-digit year (DD.MM.YY) with milliseconds
 **Log fields:** 2-digit year, milliseconds, 8-digit ID, log level, message
 
-**Note:** The different timestamp formats are intentional - Planner.log uses 4-digit years while update_*.log uses 2-digit years. Both represent the same calendar dates when parsed (e.g., 25.09.2025 and 25.09.25 both mean 25 September 2025).
+**Note:** The different timestamp formats are intentional - Planner.log uses 4-digit years
+while update_*.log uses 2-digit years. Both represent the same calendar dates when parsed
+(e.g., 25.09.2025 and 25.09.25 both mean 25 September 2025).
 
 ### Encoding
 
@@ -488,7 +495,9 @@ Reason: Missing success flags
 Checked: 28.10.2025 11:50:06
 ```
 
-The message lists the status of each validation flag (✓ = passed, ✗ = failed) to help identify the root cause. Windows Event Log receives additional details through separate flag fields (Flag1, Flag2, Flag3) for automated alerting.
+The message lists the status of each validation flag (✓ = passed, ✗ = failed) to help identify
+the root cause. Windows Event Log receives additional details through separate flag fields
+(Flag1, Flag2, Flag3) for automated alerting.
 
 ### ℹ️ No Updates
 
@@ -595,10 +604,13 @@ All Event Log entries use standardized EventIDs for monitoring and troubleshooti
 
 For different audiences, see:
 
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Step-by-step deployment checklist for production (start here!)
-- **[SECURITY.md](SECURITY.md)** - Security procedures, credential management, and best practices
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Step-by-step deployment checklist for production (start
+  here!)
+- **[SECURITY.md](SECURITY.md)** - Security procedures, credential management, and best
+  practices
 - **[TESTING.md](TESTING.md)** - How to run tests and validate the system
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** - How to contribute to this project (code standards, testing, documentation, git practices - for developers and community members)
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - How to contribute to this project (code standards,
+  testing, documentation, git practices - for developers and community members)
 
 ## Version & Release History
 
@@ -634,13 +646,18 @@ Common terms used throughout this project and documentation:
 
 - **Event Log Message** - Structured key=value format message written to Windows Event Log (machine-readable, for compliance)
 
-- **Checkpoint / Checkpoint File** - Stores timestamp of last successful run to prevent duplicate Telegram notifications
+- **Checkpoint / Checkpoint File** - Stores timestamp of last successful run to prevent
+  duplicate Telegram notifications
 
-- **Config File** - Server-specific configuration file (Config-ComputerName.ps1) containing server name, Telegram credentials, log file paths
+- **Config File** - Server-specific configuration file (Config-ComputerName.ps1) containing
+  server name, Telegram credentials, log file paths
 
-- **CMS / Cryptographic Message Syntax** - Certificate-based encryption method used to encrypt Telegram credentials at machine level (supported by Windows Task Scheduler SYSTEM user)
+- **CMS / Cryptographic Message Syntax** - Certificate-based encryption method used to encrypt
+  Telegram credentials at machine level (supported by Windows Task Scheduler SYSTEM user)
 
-- **Self-signed Certificate** - X.509 certificate generated locally for encrypting credentials; stored in LocalMachine certificate store with 5-year validity and NonExportable private key
+- **Self-signed Certificate** - X.509 certificate generated locally for encrypting
+  credentials; stored in LocalMachine certificate store with 5-year validity and
+  NonExportable private key
 
 - **Task Scheduler** - Windows service that runs this script on a schedule (daily, weekly, etc.)
 
