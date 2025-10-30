@@ -1,0 +1,200 @@
+name: Automated Tests, Static Analysis, Linting and Quality Checks
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Cache PowerShell Modules
+      uses: actions/cache@v4
+      with:
+        path: C:\Users\runneradmin\Documents\PowerShell\Modules
+        key: ${{ runner.os }}-psmodules-${{ hashFiles('**/*.ps1', '**/*.psm1') }}
+
+    - name: Install Pester and PSScriptAnalyzer
+      shell: pwsh
+      run: |
+        if (-not (Get-Module -ListAvailable -Name Pester)) {
+          Install-Module Pester -Force -SkipPublisherCheck -Scope CurrentUser
+        }
+        if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+        }
+
+    - name: Check Scripts (Validate-Scripts.ps1)
+      shell: pwsh
+      run: ./utils/Validate-Scripts.ps1 -Verbose
+
+    - name: Run Test Suite (tests/Run-Tests.ps1)
+      shell: pwsh
+      run: ./tests/Run-Tests.ps1 -Verbose
+
+    - name: Run PSScriptAnalyzer
+      shell: pwsh
+      run: |
+        $scriptFiles = Get-ChildItem -Recurse -File -Include *.ps1, *.psm1 |
+          Where-Object { $_.FullName -notmatch '\\.github|tests\\test-data' }
+        $results = $scriptFiles | Invoke-ScriptAnalyzer -Recurse -Severity Warning,Error
+        $results | ConvertTo-Json -Depth 5 | Out-File analyzer-results.json
+        if ($results.Count -gt 0) {
+          $results | Format-Table
+          exit 1
+        }
+
+    - name: Upload Analyzer Results Artifact
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: analyzer-results
+        path: analyzer-results.json
+
+    - name: Run Pester Tests with Code Coverage
+      shell: pwsh
+      run: |
+        # Create configuration for Pester v5+
+        $config = New-PesterConfiguration
+
+        # --- 1. Test sources ---
+        # All your test scripts are inside /tests
+        $config.Run.Path = 'tests'
+
+        # --- 2. Enable code coverage ---
+        $config.CodeCoverage.Enabled = $true
+
+        # --- 3. Paths to cover ---
+        # This targets the real code you want measured
+        $config.CodeCoverage.Path = @(
+          'lib'              # your PowerShell modules
+          'Run.ps1'          # entry script
+          'utils\*.ps1'      # helper scripts
+          'configs\Config.template.ps1' # optional config validation
+        )
+
+        # --- 4. Paths to exclude ---
+        # Exclude test scripts and fixture data
+        $config.CodeCoverage.Exclude = @(
+          'tests\*.Tests.ps1'
+          'tests\test-data\*'
+        )
+
+        # --- 5. Test result output (JUnit for GitHub Actions) ---
+        $config.TestResult.Enabled = $true
+        $config.TestResult.OutputFormat = 'JUnitXml'
+        $config.TestResult.OutputPath  = 'test-results.xml'
+
+        # --- 6. Code coverage report (for upload & analysis) ---
+        $config.CodeCoverage.OutputPath   = 'coverage.xml'
+        $config.CodeCoverage.OutputFormat = 'JaCoCo'
+
+        # --- 7. Run tests ---
+        $results = Invoke-Pester -Configuration $config -PassThru
+        exit $results.FailedCount
+
+    - name: Publish Test Results
+      if: always()
+      uses: dorny/test-reporter@v1
+      with:
+        name: Test Results
+        path: test-results.xml
+        reporter: java-junit
+
+    - name: Upload Test Results Artifact
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results-powershell
+        path: test-results.xml
+
+    - name: Upload Coverage Artifact
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: pester-coverage
+        path: coverage.xml
+
+    - name: Display Coverage Summary
+      if: always()
+      shell: pwsh
+      run: |
+        $cov = Select-Xml -Path coverage.xml -XPath "//counter[@type='LINE']" |
+          ForEach-Object { $_.Node }
+        if ($cov) {
+          $covered = [int]$cov.covered
+          $missed = [int]$cov.missed
+          $percent = [math]::Round(($covered / ($covered + $missed)) * 100, 2)
+          Write-Host "## Code Coverage: $percent% ($covered of $($covered + $missed) lines covered)"
+        } else {
+          Write-Host "## No coverage data found."
+        }
+    
+    - name: Print Summary Report
+      if: always()
+      shell: pwsh
+      run: |
+        Write-Host "### 🧪 Test & Coverage Summary"
+
+        # Load test results
+        if (Test-Path test-results.xml) {
+          [xml]$tr = Get-Content test-results.xml
+          $executed = ($tr.testsuites.testsuite | Measure-Object -Sum tests).Sum
+          $failed   = ($tr.testsuites.testsuite | Measure-Object -Sum failures).Sum
+          $passed   = $executed - $failed
+        } else {
+          $executed = 0; $failed = 0; $passed = 0
+        }
+
+        # Load coverage results
+        if (Test-Path coverage.xml) {
+          [xml]$cr = Get-Content coverage.xml
+          # JaCoCo format: <counter type="LINE" missed="X" covered="Y" …/>
+          $c = $cr.coverage.counter |
+                Where-Object { $_.type -eq "LINE" }
+          if ($c) {
+            $covered = [int]$c.covered
+            $missed  = [int]$c.missed
+            $total   = $covered + $missed
+            if ($total -gt 0) {
+              $covPct = [math]::Round( ($covered / $total) * 100, 2 )
+            } else {
+              $covPct = 0
+            }
+          } else {
+            $covPct = 0
+          }
+        } else {
+          $covered = 0; $missed = 0; $covPct = 0
+        }
+
+        Write-Host ""
+        Write-Host "| Metric        | Value             |"
+        Write-Host "|---------------|-------------------|"
+        Write-Host ("| Tests Run      | {0}" -f $executed)
+        Write-Host ("| Tests Passed   | {0}" -f $passed)
+        Write-Host ("| Tests Failed   | {0}" -f $failed)
+        Write-Host ("| Coverage %     | {0}%" -f $covPct)
+        Write-Host ""
+        if ($failed -gt 0 -or $covPct -lt 80) {
+          Write-Host "⚠️ **Attention**: Some tests failed or coverage is below threshold."
+        } else {
+          Write-Host "✅ All tests passed and coverage is above threshold."
+        }
+
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Lint Markdown Files
+      uses: nosborn/github-action-markdown-cli@v3.3.0
+      with:
+        files: .

@@ -1,0 +1,52 @@
+# Configuration with sensitive data (per-server)
+configs/Config-*.ps1
+!configs/Config.template.ps1
+
+# Runtime files (checkpoint files - one per server)
+last_run_*.txt
+*.log
+Planner.log
+
+# Windows/PowerShell temporary files
+*.ps1xml
+*.pssc
+*.psd1.bak
+*.psm1.bak
+
+# IDE and editor files
+.vscode/
+.idea/
+*.code-workspace
+*.swp
+*.swo
+*~
+
+# Windows system files
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Build and test outputs
+bin/
+obj/
+*.tmp
+
+# Environment-specific files
+.env
+.env.local
+*.env
+
+# Test runtime artifacts (checkpoint files generated during test execution)
+tests/test-data/**/checkpoint-*.txt
+
+# Allow committed test fixtures
+!tests/test-data/**/*.log
+!tests/test-data/**/Planner.log
+
+# Windows shortcuts
+*.lnk

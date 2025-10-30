@@ -1,0 +1,67 @@
+M.E.Doc Update Status Check
+Copyright 2025 Bohdan Potishuk, Dmytro Kravchuk
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+===============================================================================
+
+ADDITIONAL INFORMATION
+
+This project includes software developed as part of automated monitoring
+and notification systems for M.E.Doc server updates.
+
+The M.E.Doc system is a product of [M.E.Doc Documentation Management System].
+This project provides monitoring and integration capabilities and is not
+affiliated with or endorsed by the M.E.Doc creators.
+
+For more information about M.E.Doc, visit: https://medoc.com.ua/
+
+===============================================================================
+
+DEPENDENCIES
+
+This project uses the following technologies:
+
+1. PowerShell 5.1+ (Microsoft)
+   - Built-in scripting language for Windows Server
+   - No external dependencies required
+
+2. Windows Event Log API
+   - Part of Windows Server operating system
+   - Used for logging and auditing
+
+3. Telegram Bot API (optional)
+   - External service for sending notifications
+   - Requires valid bot token and chat ID
+   - See https://telegram.org/
+
+All external services are optional and configurable. The core functionality
+can run independently if notification services are not needed.
+
+===============================================================================
+
+CREDITS
+
+Authors:
+  - Bohdan Potishuk (Lead Developer)
+  - Dmytro Kravchuk (Co-author)
+
+Original concept: Automated M.E.Doc monitoring for enterprise environments
+
+Architecture: Refactored from monolithic script to modular, reusable
+components for improved maintainability and scalability.
+
+Development: Modern PowerShell practices with comprehensive error handling,
+logging, and security best practices.
+
+===============================================================================
