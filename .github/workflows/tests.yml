@@ -52,7 +52,7 @@ jobs:
 
     - name: Upload Analyzer Results Artifact
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: analyzer-results
         path: analyzer-results.json
@@ -109,14 +109,14 @@ jobs:
 
     - name: Upload Test Results Artifact
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-results-powershell
         path: test-results.xml
 
     - name: Upload Coverage Artifact
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: pester-coverage
         path: coverage.xml
