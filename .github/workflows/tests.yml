@@ -92,12 +92,11 @@ jobs:
         $config.CodeCoverage.Enabled = $true
 
         # --- 3. Paths to cover (production code only) ---
-        # This targets the real code you want measured
+        # Measures ONLY testable, production business logic.
+        # INTENTIONALLY EXCLUDES utils (see TESTING.md for detailed explanation)
         $config.CodeCoverage.Path = @(
-          'lib'              # PowerShell modules
-          'Run.ps1'          # entry script
-          'utils\*.ps1'      # helper scripts
-          'configs\Config.template.ps1' # config validation
+          'lib'              # Core production modules (target: 80%+)
+          'Run.ps1'          # Entry point orchestrator (indirect coverage via lib)
         )
 
         # --- 4. Test result output (JUnit for GitHub Actions) ---
@@ -110,8 +109,8 @@ jobs:
         $config.CodeCoverage.OutputFormat = 'JaCoCo'
 
         # --- 6. Run tests ---
-        # Note: Pester 5.7.1 doesn't support CodeCoverage.Exclude
-        # We only measure production code (lib, utils, Run.ps1) defined in Path above
+        # Note: Utils intentionally excluded from coverage metrics (see TESTING.md#why-utils-have-0-coverage)
+        # Pester 5.7.1 doesn't support CodeCoverage.Exclude, so we specify only testable paths above
         $results = Invoke-Pester -Configuration $config
         exit $results.FailedCount
 

@@ -386,10 +386,13 @@ Project Root/
    - Use Pester's `Describe`/`Context`/`It` syntax
 
 2. **Test Coverage Requirements**
-   - Minimum 80% code coverage (target: 90%+)
+   - Minimum 80% code coverage for production code (lib/) (target: 90%+)
    - All exported functions must have tests
    - All error paths must be tested
    - All parameters must be tested
+   - **Note:** Setup utility scripts (utils/) are intentionally not unit-tested
+     (interactive tools, admin-only, system operations).
+     See [TESTING.md - Code Coverage Metrics](TESTING.md#code-coverage-metrics-production-vs-setup-code).
 
 3. **Test Data Standards**
    - **Encoding**: Windows-1251 (Cyrillic support)

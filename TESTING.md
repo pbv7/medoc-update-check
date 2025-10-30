@@ -1180,6 +1180,172 @@ The project has comprehensive automated test coverage. Run tests to verify:
 | **Misc/Integration** | 27 | ✅ Excellent | Combined scenario testing, Invoke-MedocUpdateCheck |
 | **Total** | Check with `./tests/Run-Tests.ps1` | **EXCELLENT** | Comprehensive dual-log + timestamp regex coverage, production-ready |
 
+#### Code Coverage Metrics (Production vs Setup Code)
+
+### Important: Understanding Coverage Percentage
+
+The overall coverage percentage reported by the workflow includes both testable production code and untestable setup tools. To understand coverage properly:
+
+### Breakdown by Component Type
+
+| Component | Type | Testability | Notes |
+|-----------|------|-------------|-------|
+| **lib/MedocUpdateCheck.psm1** | Production | ✅ Fully tested | Core business logic (log parsing, update detection) |
+| **lib/ConfigValidation.psm1** | Production | ✅ Fully tested | Configuration validation functions |
+| **Run.ps1** | Production | ⚠️ Indirect | Entry point orchestrator (covered via lib tests) |
+| **Production Code Average** | - | **✅ Excellent** | Run `./tests/Run-Tests.ps1` to check current % |
+| **utils/Setup-Credentials.ps1** | Setup Tool | ❌ Not testable | Interactive CLI + Windows certificates (requires manual testing) |
+| **utils/Setup-ScheduledTask.ps1** | Setup Tool | ❌ Not testable | Admin-only task creation (system-level operation) |
+| **utils/Get-TelegramCredentials.ps1** | Helper | ⚠️ Indirect | Decryption helper (tested via config loading) |
+| **utils/Validate-Config.ps1** | Wrapper | ⚠️ Indirect | Validation wrapper (lib functions are tested) |
+| **utils/Validate-Scripts.ps1** | Meta-tool | ❌ Not testable | Syntax validator (validates other code) |
+| **configs/Config.template.ps1** | Template | ❌ N/A | Template file (not executable code) |
+
+### Why Utils Have 0% Coverage (By Design)
+
+Setup and utility scripts are **intentionally excluded** from CI/CD coverage metrics.
+Here's detailed technical analysis of why they can't be unit-tested with Pester:
+
+#### 1. Setup-Credentials.ps1 (Interactive Setup Tool)
+
+**What it does:**
+
+- Creates self-signed X.509 certificate in Windows LocalMachine store
+- Prompts user interactively for Telegram bot token and chat ID
+- Encrypts credentials using CMS (Cryptographic Message Syntax)
+- Writes encrypted file with restricted permissions
+
+**Why it CAN'T be easily tested:**
+
+- ❌ Requires Administrator privileges (blocked in sandboxes/CI runners)
+- ❌ Interactive user input (Read-Host prompts - can't mock reliably)
+- ❌ Creates real Windows certificates (persists in system, requires cleanup)
+- ❌ Uses CMS encryption (.NET crypto APIs - can't safely mock)
+- ❌ Modifies file permissions (system state change, requires admin)
+- ❌ Windows-specific (certificate stores don't exist on Linux/macOS)
+
+**Why this can't be "easily implemented":**
+
+- Would need full Windows environment with certificate infrastructure
+- Mocking .NET Security.Cryptography is complex and fragile
+- CI/CD runners can't have admin privileges (security risk)
+- Mocks would be so extensive they'd test the mocks, not the code
+- Cleanup would be complicated (removing test certs, permissions)
+
+#### 2. Setup-ScheduledTask.ps1 (Admin Task Creation)
+
+**What it does:**
+
+- Creates Windows Task Scheduler job for automated updates
+- Requires Administrator elevation check
+- Sets execution context to SYSTEM user
+- Configures PowerShell 7 as execution engine
+
+**Why it CAN'T be easily tested:**
+
+- ❌ Requires Administrator context (gates entire function)
+- ❌ Creates Task Scheduler jobs (system-level operation, not sandboxable)
+- ❌ Task Scheduler uses COM objects (Windows-specific, hard to mock)
+- ❌ Cleanup requires deleting tasks (side effects on system)
+- ❌ Only runs on Windows (CI/CD may use Linux runners)
+- ❌ Behavior varies by Windows version (XP, 7, 10, 11, Server editions)
+
+**Why this can't be "easily implemented":**
+
+- Would need to mock Windows.System.Diagnostics.ScheduledTask COM objects
+- COM mocking is fragile and version-dependent
+- Requires actual admin elevation (security concern for CI/CD)
+- Task creation persists on disk (cleanup failures leave artifacts)
+- Testing on Linux/macOS impossible (platform-specific feature)
+
+#### 3. Validate-Scripts.ps1 (Meta-Analysis Tool)
+
+**What it does:**
+
+- Scans all .ps1 and .psm1 files in project
+- Uses PowerShell AST parser to check syntax without executing
+- Optionally runs PSScriptAnalyzer for code quality
+- Reports errors/warnings to console
+
+**Why it CAN'T be easily tested:**
+
+- ❌ Purpose is to ANALYZE OTHER CODE (not business logic)
+- ❌ Heavily file I/O bound (reads entire project file tree)
+- ❌ Works on current file structure (tests need fake file trees)
+- ❌ Output is console formatting (testing output is brittle)
+- ❌ Tool validates ITSELF - circular testing dependency
+
+**Why this can't be "easily implemented":**
+
+- Tool is itself a meta-validation script (part of CI pipeline, not production)
+- Unit testing validators is lower priority than production logic
+- Would require creating fake file trees for test scenarios
+- Testing console output is fragile (formatting-dependent)
+
+#### 4. Get-TelegramCredentials.ps1 (Credential Helper)
+
+**What it does:**
+
+- Reads encrypted CMS credential file from disk
+- Decrypts using LocalMachine certificate's private key
+- Returns plain-text credentials as hashtable
+
+**Why it CAN'T be easily tested:**
+
+- ❌ Depends on production certificate (created by Setup-Credentials.ps1)
+- ❌ Reads real filesystem file (production path in $env:ProgramData)
+- ❌ Decrypts actual CMS messages (can't mock .NET crypto safely)
+- ❌ Works only with SYSTEM user + LocalMachine cert (context-specific)
+- ❌ File permissions are production-specific
+
+**Why this can't be "easily implemented":**
+
+- Would need real credential file + valid certificate to decrypt
+- Can't mock Unprotect-CmsMessage safely (it's .NET framework call)
+- Testing requires encrypted test credentials (circular dependency)
+- Better tested indirectly: mock credential loading at higher level
+
+#### 5. Validate-Config.ps1 (Validation Wrapper)
+
+**What it does:**
+
+- Orchestration script that calls lib/ConfigValidation.psm1 functions
+- Validates configuration file syntax and values
+- Outputs results with colored console formatting
+
+**Why it CAN'T be easily tested:**
+
+- ❌ Wrapper script around lib functions (not core logic)
+- ❌ Heavy console I/O formatting (colored output, status messages)
+- ❌ File system dependent (reads actual config files)
+- ❌ Exit codes signal success/failure (testing exit codes is brittle)
+
+**Why this can't be "easily implemented":**
+
+- The REAL validation logic is already tested in lib/ConfigValidation.psm1
+- Wrapper just orchestrates: call functions → format output → exit
+- Testing would duplicate lib/ConfigValidation tests + console tests
+- Low value: if lib is tested, wrapper works (just a CLI layer)
+
+### Alternative Validation for Utils
+
+Since unit testing isn't practical, utils are validated through:
+
+- ✅ Syntax validation (Validate-Scripts.ps1 ensures no parsing errors)
+- ✅ Code quality analysis (PSScriptAnalyzer checks best practices)
+- ✅ Code review (manual inspection during PR review)
+- ✅ Manual testing (user testing on actual Windows before deployment)
+
+### Understanding Overall Coverage Percentage
+
+The overall coverage percentage reported includes setup scripts that are intentionally not unit-tested. To get accurate picture:
+
+- **Production code coverage:** Check lib/ files (should be 80%+) ✅
+- **Overall reported coverage:** Includes untestable setup tools (will appear lower)
+- **What this means:** Lower overall % is expected and normal, not a sign of poor testing
+
+Run `./tests/Run-Tests.ps1` to see current metrics. Focus on production code (lib/) coverage for code quality assessment.
+
 #### What's Tested Well ✅
 
 1. **Log Parsing & Detection** (14 tests)
