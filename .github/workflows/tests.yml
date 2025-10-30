@@ -141,15 +141,31 @@ jobs:
       if: always()
       shell: pwsh
       run: |
-        $cov = Select-Xml -Path coverage.xml -XPath "//counter[@type='LINE']" |
-          ForEach-Object { $_.Node }
-        if ($cov) {
-          $covered = [int]$cov.covered
-          $missed = [int]$cov.missed
-          $percent = [math]::Round(($covered / ($covered + $missed)) * 100, 2)
-          Write-Host "## Code Coverage: $percent% ($covered of $($covered + $missed) lines covered)"
+        if (Test-Path coverage.xml) {
+          try {
+            # Select-Xml returns array of matches; get first (and usually only) LINE counter
+            $covNode = Select-Xml -Path coverage.xml -XPath "//counter[@type='LINE']" |
+              Select-Object -First 1 -ExpandProperty Node
+
+            if ($covNode) {
+              $covered = [int]$covNode.covered
+              $missed = [int]$covNode.missed
+              $total = $covered + $missed
+
+              if ($total -gt 0) {
+                $percent = [math]::Round(($covered / $total) * 100, 2)
+                Write-Host "## Code Coverage: $percent% ($covered of $total lines covered)"
+              } else {
+                Write-Host "## No coverage data found (coverage.xml is empty or has no counters)"
+              }
+            } else {
+              Write-Host "## No LINE counter found in coverage.xml"
+            }
+          } catch {
+            Write-Host "## Error parsing coverage data: $_"
+          }
         } else {
-          Write-Host "## No coverage data found."
+          Write-Host "## Coverage file not found (coverage.xml not generated)"
         }
     
     - name: Print Summary Report
