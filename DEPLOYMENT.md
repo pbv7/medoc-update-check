@@ -8,8 +8,8 @@ Most Windows servers don't have Git installed. Follow these steps to download th
 
 ### ☐ Step 0: Download from GitHub Release
 
-1. **Visit the GitHub Releases page:**
-   - Go to: [GitHub Releases](https://github.com/pbv7/medoc-update-check/releases)
+1. **Visit the GitHub latest release page:**
+   - Go to: [Latest Release](https://github.com/pbv7/medoc-update-check/releases/latest) (automatically redirects to newest version)
 
 2. **Download the source code ZIP:**
    - Find the latest release (e.g., v1.0.0)
