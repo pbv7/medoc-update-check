@@ -1003,7 +1003,7 @@ Before committing, verify:
 - [ ] **No credentials or sensitive data** (tokens, keys, real chat IDs)
 - [ ] **No organizational structure details** (office names, divisions)
 - [ ] All tests pass
-- [ ] No PSScriptAnalyzer warnings
+- [ ] No PSScriptAnalyzer **errors** (warnings are acceptable and documented in AGENTS.md)
 - [ ] No markdown linting violations
 - [ ] Documentation updated if needed
 - [ ] .gitignore patterns up to date
@@ -1069,7 +1069,7 @@ When adding new files:
    - [ ] Error handling is comprehensive
    - [ ] No hardcoded values (except examples)
    - [ ] Compatible with PowerShell 7.0+
-   - [ ] No PSScriptAnalyzer warnings
+   - [ ] No PSScriptAnalyzer **errors** (warnings only fail if blocking the build)
 
 2. **Tests**
    - [ ] New functions have test coverage
@@ -1157,14 +1157,19 @@ if (Get-Module -ListAvailable -Name PSScriptAnalyzer) {
 
 When you run PSScriptAnalyzer, you may see these warnings - **they are acceptable and do not need to be fixed:**
 
-| Warning | Reason | Status |
-|---------|--------|--------|
-| **PSAvoidUsingWriteHost** | CLI scripts use colored console output | ✅ Expected - necessary for user-friendly output |
-| **PSUseBOMForUnicodeEncodedFile** | Files contain Cyrillic (Ukrainian) text | ✅ Expected - BOM is optional |
+| Warning | Where | Reason | Status |
+|---------|-------|--------|--------|
+| **PSAvoidUsingWriteHost** | Test files, Run-Tests.ps1 | CLI scripts use colored console output | ✅ Expected - necessary for user-friendly output |
+| **PSUseBOMForUnicodeEncodedFile** | Multiple files | Files contain Cyrillic (Ukrainian) text | ✅ Expected - BOM is optional |
+| **PSReviewUnusedParameter** | Test mock functions | Mock functions must match signature | ✅ Expected - necessary for mocking |
+| **PSUseShouldProcessForStateChangingFunctions** | MedocUpdateCheck.psm1:617 | Helper function, not state-changing | ✅ Expected - helpers don't need ShouldProcess |
 
 **Important:** These are style warnings, not errors. They don't affect functionality or
 security. The project legitimately needs `Write-Host` for interactive scripts and status
 messages with colors.
+
+**CI/CD Behavior:** GitHub Actions only fails on PSScriptAnalyzer **Errors**, not warnings.
+See AGENTS.md for complete list of expected warnings.
 
 #### Other Checks
 

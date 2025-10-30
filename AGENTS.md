@@ -236,10 +236,18 @@ if (Get-Module -ListAvailable -Name PSScriptAnalyzer) {
 
 **These warnings are acceptable and expected** - they do not indicate problems:
 
-| Warning | Why It Occurs | Why It's OK |
-|---------|---------------|-----------|
-| **PSAvoidUsingWriteHost** | CLI utilities use `Write-Host` for colored console output | `Write-Host` is necessary for status messages with colors and formatting |
-| **PSUseBOMForUnicodeEncodedFile** | Files contain non-ASCII characters (Cyrillic comments) | Code works perfectly; BOM is optional |
+| Warning | Where | Why It Occurs | Why It's OK |
+|---------|-------|---------------|-----------|
+| **PSAvoidUsingWriteHost** | Test files, Run-Tests.ps1 | CLI utilities and tests use `Write-Host` for colored output | `Write-Host` is necessary for interactive status messages with colors and formatting |
+| **PSUseBOMForUnicodeEncodedFile** | Multiple files | Files contain non-ASCII characters (Cyrillic comments/text) | Code works perfectly; BOM is optional in Windows-1251 encoding |
+| **PSReviewUnusedParameter** | Test mock functions | Mock functions must accept parameters for signature compatibility | Parameters must match function being mocked even if unused |
+| **PSUseShouldProcessForStateChangingFunctions** | MedocUpdateCheck.psm1:617 | `New-OutcomeObject` is a test helper, not a production state-changing function | Helper functions don't need ShouldProcess support |
+
+**CI/CD Behavior:**
+
+- **Local validation** (`./utils/Validate-Scripts.ps1`): Only fails on **Errors**, not warnings
+- **GitHub Actions** (`Run PSScriptAnalyzer` step): Same behavior - only fails on **Errors**, not warnings
+- **Test files excluded**: `*.Tests.ps1` files are excluded from analyzer (intentional, already documented in code)
 
 **Note:** PSScriptAnalyzer is designed for library code. This project uses CLI utilities that
 legitimately need direct console control for user interaction. All warnings are style-related
