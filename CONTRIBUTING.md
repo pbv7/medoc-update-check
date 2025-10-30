@@ -289,7 +289,7 @@ Project Root/
    - End with period for complete sentences: `# Parse version from log.`
    - No period for fragments: `# Success case` (not `# Success case.`)
 
-   **Example: Correct Comment Format**
+   Example: Correct Comment Format
 
    ```powershell
    # Skip entries before checkpoint time to avoid duplicate notifications
