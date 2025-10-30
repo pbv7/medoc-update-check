@@ -188,8 +188,10 @@ jobs:
         if (Test-Path coverage.xml) {
           [xml]$cr = Get-Content coverage.xml
           # JaCoCo format: <counter type="LINE" missed="X" covered="Y" …/>
+          # Use Select-Object -First 1 to handle potential array results
           $c = $cr.coverage.counter |
-                Where-Object { $_.type -eq "LINE" }
+                Where-Object { $_.type -eq "LINE" } |
+                Select-Object -First 1
           if ($c) {
             $covered = [int]$c.covered
             $missed  = [int]$c.missed
