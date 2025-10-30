@@ -143,9 +143,13 @@ jobs:
       run: |
         if (Test-Path coverage.xml) {
           try {
-            # Select-Xml returns array of matches; get first (and usually only) LINE counter
-            $covNode = Select-Xml -Path coverage.xml -XPath "//counter[@type='LINE']" |
-              Select-Object -First 1 -ExpandProperty Node
+            # Get the LAST (summary) LINE counter from the report
+            # JaCoCo structure: multiple counters at different levels, summary is last
+            $covNodes = Select-Xml -Path coverage.xml -XPath "//counter[@type='LINE']" |
+              Select-Object -ExpandProperty Node
+
+            # Get the last counter (the overall summary at report level)
+            $covNode = $covNodes[-1]
 
             if ($covNode) {
               $covered = [int]$covNode.covered
@@ -186,23 +190,27 @@ jobs:
 
         # Load coverage results
         if (Test-Path coverage.xml) {
-          [xml]$cr = Get-Content coverage.xml
-          # JaCoCo format: <counter type="LINE" missed="X" covered="Y" …/>
-          # Use Select-Object -First 1 to handle potential array results
-          $c = $cr.coverage.counter |
-                Where-Object { $_.type -eq "LINE" } |
-                Select-Object -First 1
-          if ($c) {
-            $covered = [int]$c.covered
-            $missed  = [int]$c.missed
-            $total   = $covered + $missed
-            if ($total -gt 0) {
-              $covPct = [math]::Round( ($covered / $total) * 100, 2 )
+          try {
+            # Get the LAST (summary) LINE counter from report root level
+            $covNodes = Select-Xml -Path coverage.xml -XPath "//counter[@type='LINE']" |
+              Select-Object -ExpandProperty Node
+
+            if ($covNodes) {
+              # Get the last counter (the overall summary at report level)
+              $c = $covNodes[-1]
+              $covered = [int]$c.covered
+              $missed  = [int]$c.missed
+              $total   = $covered + $missed
+              if ($total -gt 0) {
+                $covPct = [math]::Round( ($covered / $total) * 100, 2 )
+              } else {
+                $covPct = 0
+              }
             } else {
-              $covPct = 0
+              $covered = 0; $missed = 0; $covPct = 0
             }
-          } else {
-            $covPct = 0
+          } catch {
+            $covered = 0; $missed = 0; $covPct = 0
           }
         } else {
           $covered = 0; $missed = 0; $covPct = 0
