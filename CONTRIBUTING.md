@@ -1,6 +1,9 @@
 # Contributing to M.E.Doc Update Check
 
-Thank you for your interest in contributing to this project! This document provides comprehensive guidelines for developers, contributors, and community members. Whether you're submitting code, documentation, or fixes, please follow these standards to maintain code quality, consistency, and reliability.
+Thank you for your interest in contributing to this project! This document provides
+comprehensive guidelines for developers, contributors, and community members. Whether you're
+submitting code, documentation, or fixes, please follow these standards to maintain code
+quality, consistency, and reliability.
 
 ## Table of Contents
 
@@ -33,7 +36,10 @@ Thank you for your interest in contributing to this project! This document provi
 
 ### Platform Support Note
 
-This project is **developed and comprehensively tested on macOS and Linux**, but **intended for Windows production servers**. Windows-specific features (Event Log, Task Scheduler, certificate management) are tested in production on the developer's servers only. Broader Windows testing coverage is needed.
+This project is **developed and comprehensively tested on macOS and Linux**, but **intended
+for Windows production servers**. Windows-specific features (Event Log, Task Scheduler,
+certificate management) are tested in production on the developer's servers only. Broader
+Windows testing coverage is needed.
 
 **Contributors should be aware:**
 
@@ -95,13 +101,21 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force"
 ### Core Principles
 
 1. **Separation of Concerns**
-   - `lib/MedocUpdateCheck.psm1`: Pure business logic (log parsing, update detection, message formatting) - no hardcoded values, no direct Telegram calls, no Event Log writes. All config-driven.
-   - `Run.ps1`: Universal entry point - loads config, calls module functions, handles Telegram sending and Event Log writing
-   - `configs/Config-$env:COMPUTERNAME.ps1`: Server-specific settings only (ServerName, MedocLogsPath, BotToken, ChatId, checkpoint location) - auto-generated filename
-   - `utils/Setup-Credentials.ps1`: Credential encryption setup - creates/manages self-signed certificate, encrypts credentials using CMS
-   - `utils/Setup-ScheduledTask.ps1`: Task Scheduler automation - creates scheduled task with PowerShell 7+ execution
-   - `utils/Validate-Scripts.ps1`: Development validation - syntax checking for all PowerShell scripts
-   - `utils/Get-TelegramCredentials.ps1`: Helper script - decrypts credentials when config loads
+   - `lib/MedocUpdateCheck.psm1`: Pure business logic (log parsing, update detection, message
+     formatting) - no hardcoded values, no direct Telegram calls, no Event Log writes. All
+     config-driven.
+   - `Run.ps1`: Universal entry point - loads config, calls module functions, handles Telegram
+     sending and Event Log writing
+   - `configs/Config-$env:COMPUTERNAME.ps1`: Server-specific settings only (ServerName,
+     MedocLogsPath, BotToken, ChatId, checkpoint location) - auto-generated filename
+   - `utils/Setup-Credentials.ps1`: Credential encryption setup - creates/manages self-signed
+     certificate, encrypts credentials using CMS
+   - `utils/Setup-ScheduledTask.ps1`: Task Scheduler automation - creates scheduled task with
+     PowerShell 7+ execution
+   - `utils/Validate-Scripts.ps1`: Development validation - syntax checking for all PowerShell
+     scripts
+   - `utils/Get-TelegramCredentials.ps1`: Helper script - decrypts credentials when config
+     loads
 
 2. **No Hardcoded Values in Module**
    - All settings must come from configuration
@@ -400,7 +414,8 @@ Project Root/
 
 6. **Mocking External Calls** (Critical for Unit Tests)
 
-   When mocking functions that make external calls (API calls, file I/O, etc.), **always scope the mock to the module** to prevent accidental network calls:
+   When mocking functions that make external calls (API calls, file I/O, etc.), **always
+   scope the mock to the module** to prevent accidental network calls:
 
    ```powershell
    # ✅ CORRECT: Mock is scoped to the module, won't affect other modules
@@ -774,6 +789,23 @@ See [Event Log Query Examples in TESTING.md](TESTING.md#event-log-query-examples
    https://example.com
    ```
 
+6. **MD013** - Line length (configured in `.markdownlint.json`)
+
+   ```markdown
+   Good:
+   This explanation provides context about something complex in
+   the codebase.
+
+   Bad (too long):
+   This explanation provides context about something very complex.
+   ```
+
+   **When fixing MD013:**
+   - Break at logical sentence/clause boundaries
+   - Preserve all information (never delete to shorten lines)
+   - Acceptable exceptions: table cells, code blocks, URLs, file paths
+   - Use proper indentation when breaking list items
+
 **Warnings to Fix**:
 
 1. **MD012** - No more than one consecutive blank line
@@ -870,14 +902,34 @@ Requirements:
 
 ### Commit Message Format
 
+This project follows **Conventional Commits** specification ([https://www.conventionalcommits.org/](https://www.conventionalcommits.org/)).
+
+**Format:**
+
 ```text
-[TYPE] Brief description (50 chars max)
+<type>(<scope>): <subject>
 
-Detailed explanation if needed. Wrap at 72 characters.
-Explain what and why, not what you did.
+<body>
 
-Fixes: #123
-References: #456
+<footer>
+```
+
+**Example:**
+
+```text
+feat(credentials): add CMS encryption with certificate rotation
+
+Implement Cryptographic Message Syntax encryption for Telegram
+credentials with automatic certificate rotation on expiry or
+validation failure. Certificates meet CMS requirements for
+Document Encryption and work with SYSTEM user.
+
+- Create self-signed DocumentEncryptionCert with 5-year validity
+- Validate existing certificates meet CMS requirements
+- Auto-rotate if expired or missing required EKU
+- Restrict permissions to SYSTEM + Administrators
+
+Fixes: #42
 ```
 
 **Types**:
@@ -887,21 +939,53 @@ References: #456
 - `docs:` - Documentation changes
 - `test:` - Test additions/modifications
 - `refactor:` - Code restructuring (no behavior change)
-- `chore:` - Maintenance, dependencies, tooling
+- `perf:` - Performance improvements
+- `style:` - Code formatting (no behavior change)
+- `chore:` - Build, dependencies, tooling, CI/CD
+- `ci:` - CI/CD configuration
+
+**Scope** (optional but recommended):
+
+- `credentials` - Credential/security changes
+- `tests` - Test suite changes
+- `docs` - Documentation changes
+- `config` - Configuration changes
+- `workflow` - GitHub Actions/CI changes
+
+**Subject line rules:**
+
+- Use imperative mood ("add" not "added" or "adds")
+- Start with lowercase (unless proper noun)
+- No period at end
+- Maximum 50 characters
+
+**Body** (optional for non-trivial changes):
+
+- Explain WHY, not WHAT
+- Wrap at 72 characters
+- Separate from subject with blank line
+
+**Footer** (optional):
+
+- Reference issues: `Fixes: #123`, `Closes: #456`
+- Breaking changes: `BREAKING CHANGE: description`
 
 ### ⚠️ PII & Sensitive Data - Critical Before Committing
 
-**IMPORTANT:** Do NOT commit real infrastructure details, credentials, or organizational information.
+**IMPORTANT:** Do NOT commit real PII, credentials, or organizational information.
 
-**Never commit:**
+**Never commit (PII - Personally Identifiable Information):**
 
-- Real server names or hostnames (use generic: `MEDOC-SRV01`, `MY-MEDOC-SERVER`)
+- Real Telegram chat IDs or user identifiers (uniquely identifies person/organization)
+- Email addresses with real names or domains (except generic `user@example.com`)
+- Organizational structure details (office locations, divisions, departments, company names)
+
+**Never commit (Sensitive Credentials & Secrets):**
+
+- Real Telegram bot tokens, API keys, or any credentials
+- Real server names or hostnames that identify infrastructure
 - Infrastructure provider names or abbreviations
 - Real IP addresses, domain names, or UNC network paths
-- Email addresses (except generic examples like `user@example.com`)
-- Real Telegram bot tokens, API keys, or any credentials
-- Real Telegram chat IDs or user identifiers
-- Organizational structure details (office locations, divisions, departments)
 - Configuration files with real values (only commit `Config.template.ps1`)
 
 **Always use instead:**
@@ -1078,7 +1162,9 @@ When you run PSScriptAnalyzer, you may see these warnings - **they are acceptabl
 | **PSAvoidUsingWriteHost** | CLI scripts use colored console output | ✅ Expected - necessary for user-friendly output |
 | **PSUseBOMForUnicodeEncodedFile** | Files contain Cyrillic (Ukrainian) text | ✅ Expected - BOM is optional |
 
-**Important:** These are style warnings, not errors. They don't affect functionality or security. The project legitimately needs `Write-Host` for interactive scripts and status messages with colors.
+**Important:** These are style warnings, not errors. They don't affect functionality or
+security. The project legitimately needs `Write-Host` for interactive scripts and status
+messages with colors.
 
 #### Other Checks
 
@@ -1097,7 +1183,8 @@ markdownlint "**/*.md"
 
 ### Secure Credential Storage (SYSTEM User Compatible)
 
-This project uses CMS (Cryptographic Message Syntax) encryption with self-signed LocalMachine certificate for credentials to work with Task Scheduler running as SYSTEM user.
+This project uses CMS (Cryptographic Message Syntax) encryption with self-signed LocalMachine
+certificate for credentials to work with Task Scheduler running as SYSTEM user.
 
 **Key Points for Contributors:**
 
@@ -1482,7 +1569,8 @@ For configuration:
 
 ## Code of Conduct
 
-Please note that this project is released with a [Contributor Code of Conduct](CODE_OF_CONDUCT.md). By participating in this project you agree to abide by its terms.
+Please note that this project is released with a [Contributor Code of Conduct](CODE_OF_CONDUCT.md).
+By participating in this project you agree to abide by its terms.
 
 ---
 

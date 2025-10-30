@@ -1,6 +1,8 @@
 # AGENTS.md
 
-AI coding agents guide for the M.E.Doc Update Check project. This file provides context and instructions to help AI agents (Claude, GitHub Copilot, Cursor, Factory, etc.) work effectively on this codebase.
+AI coding agents guide for the M.E.Doc Update Check project. This file provides context and
+instructions to help AI agents (Claude, GitHub Copilot, Cursor, Factory, etc.) work
+effectively on this codebase.
 
 ## Project Overview
 
@@ -48,7 +50,8 @@ All three flags must be present for SUCCESS. Missing any flag = FAILURE:
    - Confirms: .NET infrastructure validation successful
 
 2. **Service Restart Success**
-   - Pattern: `Службу ZvitGrp запущено` (service started, accepts variations like "з підвищенням прав" - with elevated privileges)
+   - Pattern: `Службу ZvitGrp запущено` (service started, accepts variations like "з
+     підвищенням прав" - with elevated privileges)
    - Confirms: Core ZvitGrp service successfully restarted
    - Real log example: `Службу ZvitGrp запущено з підвищенням прав`
 
@@ -59,7 +62,9 @@ All three flags must be present for SUCCESS. Missing any flag = FAILURE:
 
 ## Setup Commands for CI/CD
 
-**Note for Agents:** These commands are executed by GitHub Actions in a clean Windows sandbox environment, NOT on local development machines. Do NOT execute these without user permission.
+**Note for Agents:** These commands are executed by GitHub Actions in a clean Windows
+sandbox environment, NOT on local development machines. Do NOT execute these without user
+permission.
 
 ### GitHub Actions CI/CD Setup (Automatic)
 
@@ -236,7 +241,9 @@ if (Get-Module -ListAvailable -Name PSScriptAnalyzer) {
 | **PSAvoidUsingWriteHost** | CLI utilities use `Write-Host` for colored console output | `Write-Host` is necessary for status messages with colors and formatting |
 | **PSUseBOMForUnicodeEncodedFile** | Files contain non-ASCII characters (Cyrillic comments) | Code works perfectly; BOM is optional |
 
-**Note:** PSScriptAnalyzer is designed for library code. This project uses CLI utilities that legitimately need direct console control for user interaction. All warnings are style-related and do not affect functionality or security.
+**Note:** PSScriptAnalyzer is designed for library code. This project uses CLI utilities that
+legitimately need direct console control for user interaction. All warnings are style-related
+and do not affect functionality or security.
 
 #### 4. Complete Pre-commit Validation Workflow
 
@@ -281,6 +288,240 @@ git commit -m "Your commit message"
 - ✓ All tests pass (./tests/Run-Tests.ps1)
 - ⚠️ Code quality passes (PSScriptAnalyzer - optional)
 - ⚠️ All scripts include `#Requires -Version 7.0` (checked by script)
+
+## CLI Tools & External Integrations for Agents
+
+### Tool Selection Hierarchy (Agents)
+
+When accomplishing a task, agents should consider tools in this order:
+
+#### 1. PREFERRED: Internal Agent Capabilities (If Available)
+
+- Agent-native tools (file read/write, bash execution, search)
+- MCP (Model Context Protocol) server tools if available
+- Agent Task delegation (specialized sub-agents for complex work)
+- Example: Use Grep tool instead of bash `grep`, Read tool instead of `cat`
+
+#### 2. SECOND CHOICE: Project-Provided Tools
+
+- `./tests/Run-Tests.ps1` - PowerShell testing (local execution)
+- `./utils/Validate-Scripts.ps1` - PowerShell syntax validation
+- `./.markdownlint.json` - Markdown linting config (requires cli)
+
+#### 3. THIRD CHOICE: Remote Execution (No Installation)
+
+- `npx` tools - Markdown linting (`npx markdownlint-cli2`)
+- `gh` (GitHub CLI) - PR creation, issue management
+- These run in isolated environments, no system pollution
+
+#### 4. LAST RESORT: Local Installation (Ask First)
+
+- `Install-Module` (PowerShell modules)
+- `npm install -g` (global node packages)
+- `pipx` / `uvx` (Python tools)
+- **MUST ask user permission first**
+
+### Tool Availability Decision Matrix
+
+| Task | Preferred Method | Alt Method | Notes |
+|------|-----------------|-----------|-------|
+| File reading | Agent Read tool | `cat` via bash | Faster, safer with agent tools |
+| Pattern search | Agent Grep tool | `grep` / `rg` via bash | Grep tool optimized for this |
+| Line counting | Agent Read + count | `awk` / `wc` via bash | Read tool sufficient for most |
+| Markdown linting | `npx markdownlint-cli2` | MCP markdown tool | Remote exe preferred over local install |
+| GitHub operations | `gh` CLI via bash | MCP github tool | If available, use MCP; else gh CLI |
+| PowerShell tests | `./tests/Run-Tests.ps1` via bash | N/A | Project-provided, always available |
+| Code analysis | MCP code analysis | PSScriptAnalyzer via bash | Use MCP if available for speed |
+
+### When to Use Each Category
+
+#### 1. Internal Agent Tools (ALWAYS FIRST)
+
+**Why preferred:**
+
+- ✅ No external dependencies
+- ✅ Built-in to agent (always available)
+- ✅ Consistent output format
+- ✅ Direct integration with agent capabilities
+- ✅ No network latency (offline capable)
+
+**Examples:**
+
+- Read files → Use **Read tool** (not `cat`)
+- Search code → Use **Grep tool** (not bash `grep`)
+- Find files → Use **Glob tool** (not bash `find`)
+- Execute code → Use **Bash tool** (for actual commands)
+- Explore codebase → Use **Task/Explore agent** (not manual searching)
+
+#### 2. MCP Tools (If Configured)
+
+**Why important:**
+
+- ✅ Specialized domain knowledge
+- ✅ Persistent connections (faster)
+- ✅ Standard interface across agents
+- ✅ Better error handling
+- ✅ Agent-native integration
+
+**Examples:**
+
+- Docker operations → `mcp__docker-mcp-toolkit__*`
+- GitHub operations → `mcp__github__*` (if available)
+- Web fetching → WebFetch tool (built-in)
+- Slash commands → SlashCommand tool (project-specific)
+
+**When using MCP:**
+
+- Check available tools first: `ListMcpResourcesTool`
+- Use MCP tools before external CLIs when available
+- Prefer specialized MCP agents for domain tasks
+
+#### 3. Project-Provided Tools
+
+**Why use:**
+
+- ✅ No external dependencies needed
+- ✅ Tested and validated for this project
+- ✅ Already configured correctly
+- ✅ Part of development workflow
+
+**Available:**
+
+- `./tests/Run-Tests.ps1` - Test runner
+- `./utils/Validate-Scripts.ps1` - PowerShell validator
+- `.markdownlint.json` - Markdown linting config
+
+#### 4. Remote CLI Tools (No Installation)
+
+**npx (Node Package Executor):**
+
+- Use for: Markdown linting validation
+- How: `npx markdownlint-cli2 *.md`
+- Advantage: No installation, always latest version
+- When: Before committing changes
+
+**gh (GitHub CLI):**
+
+- Use for: PR creation, issue management, workflow checks
+- Advantage: Better than manual git, handles formatting
+- When: User explicitly asks to create PR
+- Note: Requires authentication (user's responsibility)
+
+**Others:**
+
+- `uvx` (Python) - Use if documenting Python tools (rare in this project)
+- `pipx` (Python) - Use if documenting Python tools (rare in this project)
+
+#### 5. Local Installation (Request Permission)
+
+**When to request:**
+
+- User explicitly asks to install
+- Installation needed for essential feature
+- No alternative agent tool available
+
+**How to request:**
+
+```text
+"Would you like to install Pester locally for testing? This will add it to your PowerShell installation."
+```
+
+**Always check first:**
+
+```powershell
+if (Get-Module -ListAvailable -Name Pester) {
+    # Already installed, use it
+} else {
+    # Ask user before installing
+}
+```
+
+### Decision Tree for Agents
+
+```text
+Need to accomplish task?
+├─ Can agent do it natively?
+│  ├─ YES → Use internal agent tool (Read, Grep, Glob, Bash)
+│  └─ NO → Continue
+│
+├─ Is MCP server available for this?
+│  ├─ YES → Use MCP tool
+│  └─ NO → Continue
+│
+├─ Is project-provided tool available?
+│  ├─ YES → Use project tool (./utils/*, ./tests/*)
+│  └─ NO → Continue
+│
+├─ Can remote CLI accomplish it? (No local install)
+│  ├─ YES → Use npx / gh / web fetch
+│  └─ NO → Continue
+│
+└─ Local installation needed?
+   ├─ YES → Ask user permission first
+   └─ NO → Research alternatives or Task agent
+```
+
+### Usage Examples
+
+**✅ GOOD: Use internal agent tools first:**
+
+```text
+Task: Find all lines mentioning "TODO" in code
+Solution: Use Grep tool (not bash grep)
+Result: Fast, consistent, no external dependencies
+```
+
+**✅ GOOD: Use MCP if available:**
+
+```text
+Task: Check GitHub PR status
+Check: If mcp__github tool available
+If yes: Use MCP GitHub tool
+If no: Use gh CLI as fallback
+```
+
+**✅ GOOD: Use project tools:**
+
+```text
+Task: Validate PowerShell syntax
+Use: ./utils/Validate-Scripts.ps1 via Bash tool
+Why: Project-tested, no external dependencies
+```
+
+**✅ GOOD: Use remote CLI when needed:**
+
+```text
+Task: Validate markdown before commit
+Use: npx markdownlint-cli2 *.md
+Why: No installation, always latest, removes local bloat
+```
+
+**✅ GOOD: Ask before installing:**
+
+```text
+"Would you like to install PSScriptAnalyzer locally for code quality checks?"
+Check if available first, only suggest if not installed
+```
+
+**❌ BAD: Automatically install:**
+
+```bash
+npm install -g markdownlint-cli  # Bad: user not asked
+Install-Module Pester -Force      # Bad: user not asked
+```
+
+**❌ BAD: Ignore available tools:**
+
+```bash
+# Bad: bash grep instead of Grep tool
+grep "pattern" file.txt
+
+# Bad: bash cat instead of Read tool
+cat file.txt
+
+# Bad: ignore MCP tools
+Use gh CLI without checking mcp__github availability
+```
 
 ## PowerShell 7+ Features for Code Generation
 
@@ -578,7 +819,9 @@ function Invoke-MedocUpdateCheck { }
 function Write-EventLogEntry { }
 ```
 
-**Approved Verbs:** Get, Test, Invoke, Write, New, Set, Remove, Find, Select, Out, Format, Group, Measure, Compare, Copy, Join, Split, Export, Import, ConvertTo, ConvertFrom, Update, Add, Disable, Enable, Save, Show, Stop, Start, Suspend, Restart, Resume.
+**Approved Verbs:** Get, Test, Invoke, Write, New, Set, Remove, Find, Select, Out, Format,
+Group, Measure, Compare, Copy, Join, Split, Export, Import, ConvertTo, ConvertFrom, Update,
+Add, Disable, Enable, Save, Show, Stop, Start, Suspend, Restart, Resume.
 
 ### Module Structure
 
@@ -682,7 +925,8 @@ $content = Get-Content -Path $path -Encoding Default
 $content = Get-Content -Path $path -Encoding UTF8  # WRONG
 ```
 
-**Why:** M.E.Doc is a Ukrainian accounting software. Its Event Logs use Windows-1251 (CP1251) encoding for Cyrillic characters. Tests must match this encoding.
+**Why:** M.E.Doc is a Ukrainian accounting software. Its Event Logs use Windows-1251 (CP1251)
+encoding for Cyrillic characters. Tests must match this encoding.
 
 ### Comment Style
 
@@ -1071,6 +1315,42 @@ This project uses GitHub Actions markdown linting. Common issues and fixes:
 
 **Auto-fix:** Same as MD031 above.
 
+### MD013: Line Length
+
+**Issue:** Line exceeds maximum length (check `.markdownlint.json` for current limit)
+
+**Why this rule exists?** Long lines are harder to read in standard editors and version control
+diffs. This project enforces line length limits to maintain readability across different tools
+and environments.
+
+**Auto-fix Guidelines:**
+
+1. **Break long sentences** at logical points (after commas, conjunctions, or clauses)
+2. **Preserve all information** — never delete content to shorten lines
+3. **Exceptions that are acceptable:**
+   - Table cells in markdown tables (breaking them destroys table structure)
+   - Code blocks and code fence examples (preserve exact formatting)
+   - URLs in markdown links (keep complete links)
+   - File paths and directory structures
+4. **How to break lines properly:**
+
+   ```markdown
+   # ❌ WRONG: Single very long line
+   This is a very long explanation that provides important context about...
+
+   # ✅ CORRECT: Break at logical point with proper indentation
+   This is a very long explanation that provides important context
+   about...
+   ```
+
+5. **Special cases:**
+   - **Bullet points:** Break after dash, keeping content indented
+   - **Descriptions:** Break after punctuation or logical clause boundaries
+   - **Code in markdown:** Keep on single line (exception to length rule)
+
+**Before committing:** Run `npx markdownlint-cli2 *.md` and fix any MD013 violations in your
+changes.
+
 ## Project Structure
 
 ```text
@@ -1339,16 +1619,44 @@ git push origin feature/your-feature-name
 
 ### Commit Message Format
 
-Recommended format:
+This project uses **Conventional Commits** format
+([https://www.conventionalcommits.org/](https://www.conventionalcommits.org/)).
+
+**Format:**
 
 ```text
-[Type] Brief description
+<type>(<scope>): <subject>
 
-Longer explanation of changes if needed.
+<body>
 
-- Specific change 1
-- Specific change 2
+<footer>
 ```
+
+**Example for AI agents:**
+
+```text
+feat(credentials): add CMS encryption with certificate rotation
+
+Implement Cryptographic Message Syntax encryption for Telegram
+credentials with automatic certificate rotation on expiry or
+validation failure. Certificates now meet CMS requirements for
+Document Encryption and are readable by SYSTEM user.
+
+- Create self-signed DocumentEncryptionCert with 5-year validity
+- Validate existing certificates meet CMS requirements
+- Auto-rotate if expired or missing required EKU
+- Restrict permissions to SYSTEM + Administrators
+```
+
+#### ⚠️ IMPORTANT - No Agent Banners in Commits
+
+**NEVER include** these in commit messages:
+
+- ❌ `🤖 Generated with [Claude Code](https://claude.com/claude-code)`
+- ❌ `Co-Authored-By: Claude <noreply@anthropic.com>`
+- ❌ Any AI agent attribution banners
+
+**Why:** These are only for specific contexts (pull requests, documentation) - NOT for commits that will be in permanent git history.
 
 **Types:**
 
@@ -1357,7 +1665,31 @@ Longer explanation of changes if needed.
 - `test:` Test additions or fixes
 - `docs:` Documentation changes
 - `refactor:` Code restructuring without behavior change
-- `chore:` Build, dependencies, tooling
+- `perf:` Performance improvements
+- `style:` Code formatting (no behavior change)
+- `chore:` Build, dependencies, tooling, CI/CD
+- `ci:` CI/CD configuration
+
+**Scope** (optional but recommended):
+
+- `credentials` - Credential/security changes
+- `tests` - Test suite changes
+- `docs` - Documentation
+- `config` - Configuration
+- `workflow` - GitHub Actions/CI
+
+**Subject line rules:**
+
+- Use imperative mood ("add" not "added")
+- Start lowercase (unless proper noun)
+- No period at end
+- Maximum 50 characters
+
+**Body** (optional for non-trivial changes):
+
+- Explain WHY, not WHAT
+- Wrap at 72 characters
+- Separate from subject with blank line
 
 ## Security Considerations
 
@@ -1365,15 +1697,18 @@ Longer explanation of changes if needed.
 
 **Before committing ANY code, examples, or documentation:**
 
-**Never include:**
+**NEVER include (PII - Personally Identifiable Information):**
 
-- Real server names or hostnames
+- Real chat IDs or user identifiers (uniquely identifies person/organization)
+- Email addresses with real names or domains (except generic `user@example.com`)
+- Organizational structure details (office locations, departments, company names)
+
+**NEVER include (Sensitive Credentials & Secrets):**
+
+- Real API keys, tokens, or credentials (Telegram bot tokens, etc.)
+- Real server names or hostnames that identify infrastructure
 - Infrastructure provider names or abbreviations
 - Real IP addresses, domain names, or network paths
-- Email addresses (except generic examples like `user@example.com`)
-- Real API keys, tokens, or credentials
-- Real chat IDs or user identifiers
-- Organizational structure details (office locations, departments, names)
 
 **Always use instead:**
 
@@ -1394,7 +1729,9 @@ Longer explanation of changes if needed.
 
 ### Credentials & Secrets (SYSTEM User Compatible)
 
-**IMPORTANT:** This project uses CMS (Cryptographic Message Syntax) encryption with self-signed LocalMachine certificate for credentials compatible with Task Scheduler running as SYSTEM user.
+**IMPORTANT:** This project uses CMS (Cryptographic Message Syntax) encryption with
+self-signed LocalMachine certificate for credentials compatible with Task Scheduler running
+as SYSTEM user.
 
 **Never commit:**
 
@@ -1439,7 +1776,9 @@ When `Setup-Credentials.ps1` runs, it validates existing certificates meet CMS r
 
 **Why Validation Matters:**
 
-Old certificates generated without proper CMS requirements will cause `Protect-CmsMessage` to fail at runtime with: "The certificate is not valid for encryption." The validation detects this silently before encryption and automatically regenerates the certificate.
+Old certificates generated without proper CMS requirements will cause `Protect-CmsMessage` to
+fail at runtime with: "The certificate is not valid for encryption." The validation detects
+this silently before encryption and automatically regenerates the certificate.
 
 **Hybrid ServerName Handling:**
 
@@ -1589,7 +1928,9 @@ Always use markdown links to point to actual sources:
 
 ### Avoiding Hardcoded Values in Documentation
 
-When documenting numeric or dynamic values (test counts, file sizes, line counts, version numbers), **provide commands to obtain them** instead of hardcoding the values. This prevents documentation from becoming stale.
+When documenting numeric or dynamic values (test counts, file sizes, line counts, version
+numbers), **provide commands to obtain them** instead of hardcoding the values. This prevents
+documentation from becoming stale.
 
 **❌ DON'T (Hardcoded Values - Will Become Stale):**
 
@@ -1912,11 +2253,16 @@ Common documentation improvements to suggest:
 
 ### Examples of Good Proposals
 
-**Good:** "I notice Event Log examples appear in 4 files with different -MaxEvents values (10, 20, 50, 1). Should I consolidate to TESTING.md with clear use cases for each scenario?"
+**Good:** "I notice Event Log examples appear in 4 files with different -MaxEvents values
+(10, 20, 50, 1). Should I consolidate to TESTING.md with clear use cases for each scenario?"
 
-**Good:** "ServerName config is explained 3 different ways in README, SECURITY, and CONTRIBUTING. Users don't know which approach to use. Should I create comprehensive guide in SECURITY.md with clear scenarios?"
+**Good:** "ServerName config is explained 3 different ways in README, SECURITY, and
+CONTRIBUTING. Users don't know which approach to use. Should I create comprehensive guide in
+SECURITY.md with clear scenarios?"
 
-**Good:** "Windows-1251 encoding is mentioned 7 times across docs but never fully explained. Should I create a section in SECURITY.md covering why, when, how, troubleshooting, and configuration?"
+**Good:** "Windows-1251 encoding is mentioned 7 times across docs but never fully explained.
+Should I create a section in SECURITY.md covering why, when, how, troubleshooting, and
+configuration?"
 
 **Bad:** "Let me add Event Log examples to every file that mentions them."
 
@@ -2025,7 +2371,9 @@ if (Get-Module -ListAvailable -Name PSScriptAnalyzer) {
 
 #### Event ID Management (Centralized Enum)
 
-**Important:** All Event IDs are defined in a centralized `enum MedocEventId` in `lib/MedocUpdateCheck.psm1`. This enum serves as the single source of truth for all Event IDs across the project.
+**Important:** All Event IDs are defined in a centralized `enum MedocEventId` in
+`lib/MedocUpdateCheck.psm1`. This enum serves as the single source of truth for all Event IDs
+across the project.
 
 **Enum structure by range:**
 
