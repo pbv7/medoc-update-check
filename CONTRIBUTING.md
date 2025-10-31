@@ -94,6 +94,27 @@ pwsh ./tests/Run-Tests.ps1
 pwsh -Command "Install-Module PSScriptAnalyzer -Force"
 ```
 
+### For AI Coding Agents
+
+If you're an AI agent (Claude, GitHub Copilot, Cursor, Codeium, etc.), start with the
+comprehensive AI agent guides:
+
+- **[AGENTS.md](AGENTS.md)** - Quick-start reference for AI agents (also accessible via
+  `CLAUDE.md` symlink)
+- **[AGENTS-CODE-STANDARDS.md](AGENTS-CODE-STANDARDS.md)** - PowerShell code style, naming
+  conventions, modern PS7+ features, and removed cmdlets to avoid
+- **[AGENTS-TESTING.md](AGENTS-TESTING.md)** - Testing procedures, Pester syntax, enum usage,
+  and validation
+- **[AGENTS-SECURITY.md](AGENTS-SECURITY.md)** - Security best practices, PII concerns, and
+  credential handling
+- **[AGENTS-DOCUMENTATION.md](AGENTS-DOCUMENTATION.md)** - Documentation maintenance, avoiding
+  stale docs, single-source-of-truth principles
+- **[AGENTS-TOOLS-AND-WORKFLOW.md](AGENTS-TOOLS-AND-WORKFLOW.md)** - Tool selection,
+  git workflow, CI/CD setup, and agent interaction guidelines
+
+These guides are specifically written for AI agents and include best practices, code standards,
+security considerations, and workflow procedures for this project.
+
 ---
 
 ## Architecture and Design Principles
