@@ -528,9 +528,20 @@ $result = Test-UpdateOperationSuccess -MedocLogsPath "dual-log-success"
 # In tests, create files with proper encoding
 $result = Test-UpdateOperationSuccess -MedocLogsPath "dual-log-success"
 
-# To fix test file encoding:
-iconv -f UTF-8 -t WINDOWS-1251 sample-log.txt
+# To fix test file encoding to Windows-1251 (PowerShell native - all platforms):
+$encoding = [System.Text.Encoding]::GetEncoding(1251)
+$content = Get-Content -Path sample-log.txt -Raw
+[System.IO.File]::WriteAllBytes("sample-log.txt", $encoding.GetBytes($content))
 ```
+
+**Alternative for macOS/Linux (if iconv is available):**
+
+```bash
+iconv -f UTF-8 -t WINDOWS-1251 sample-log.txt > sample-log.txt.tmp && mv sample-log.txt.tmp sample-log.txt
+```
+
+**Why PowerShell is preferred:** Works on all platforms (Windows, macOS, Linux) without
+external tool dependencies. The iconv approach requires the tool to be installed on the system.
 
 ### Pitfall 4: Event Log Access on macOS/Linux
 

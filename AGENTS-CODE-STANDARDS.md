@@ -146,7 +146,7 @@ $removed = @('Get-EventLog', 'Write-EventLog', 'New-EventLog', 'Get-WmiObject',
 
 foreach ($cmd in $removed) {
     if (Select-String -Path *.ps1 -Pattern $cmd -Quiet) {
-        WARN: "Generated code contains removed cmdlet: $cmd"
+        Write-Warning "Generated code contains removed cmdlet: $cmd"
     }
 }
 ```
@@ -357,11 +357,12 @@ Get-ChildItem -Path lib, tests, utils -Filter *.ps1 -Recurse | ForEach-Object {
 
 # Check for comments without capital letter
 Get-ChildItem -Path lib, tests, utils -Filter *.ps1 -Recurse | ForEach-Object {
-    $lines = Get-Content $_
+    $file = $_  # Capture file object from outer loop
+    $lines = Get-Content $file.FullName
     $lines | ForEach-Object -Begin { $lineNum = 0 } -Process {
         $lineNum++
         if ($_ -match '^\s*#\s+[a-z]') {
-            Write-Host "⚠️ Lowercase comment at $($_.FullPath):$lineNum"
+            Write-Host "⚠️ Lowercase comment at $($file.FullName):$lineNum"
         }
     }
 }
