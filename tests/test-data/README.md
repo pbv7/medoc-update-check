@@ -178,7 +178,7 @@ M.E.Doc update detection uses a two-log strategy. Each test scenario contains bo
 
 - `Planner.log` - Trigger shows expected version: `ezvit.11.02.186-11.02.187.upd`
 - `update_*.log` - Contains all 3 flags but version doesn't match
-  - Pattern: `новая версія - 185` (should be 187)
+  - Pattern: `Версія програми - 185` (should be 187)
 
 **Failure Reason:**
 
