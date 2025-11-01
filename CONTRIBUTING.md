@@ -1535,7 +1535,7 @@ Write-Host "All flags confirmed: $($result.Flag1_Infrastructure -and $result.Fla
 | Missing Flag 2 | dual-log-missing-flag2 | Status = "Failed", Success = $false (service restart flag missing) |
 | Missing Flag 3 | dual-log-missing-flag3 | Status = "Failed", Success = $false (version confirmation missing) |
 | Failed Update | dual-log-failed | Status = "Failed", Success = $false (update did not complete) |
-| Missing Log | dual-log-missing-log | Status = "Failed", ErrorId = UpdateLogMissing (1201) |
+| Missing Log | dual-log-missing-updatelog | Status = "Failed", ErrorId = UpdateLogMissing (1201) |
 
 ---
 
