@@ -275,8 +275,7 @@ function Test-UpdateOperationSuccess {
     }
 
     # Build encoding troubleshooting message (reused in multiple error handlers)
-    $validList = $validCodePages -join ', '
-    $encodingTroubleshoot = "Troubleshooting: Verify EncodingCodePage matches M.E.Doc log file encoding. Common supported values: $validList."
+    $encodingTroubleshoot = "Troubleshooting: Verify EncodingCodePage matches M.E.Doc log file encoding. Common supported values: $($validCodePages -join ', ')."
 
     # Read Planner.log with encoding error handling
     try {
