@@ -173,9 +173,25 @@ At the very top of the test file (before any other code), add the `using module`
 ```powershell
 # Import module at compile time to make enum types available
 using module "..\lib\MedocUpdateCheck.psm1"
+
+BeforeAll {
+    # Import the module at runtime for function calls
+    $modulePath = Join-Path $PSScriptRoot "..\lib\MedocUpdateCheck.psm1"
+    Import-Module $modulePath -Force
+}
 ```
 
-This makes the `MedocEventId` enum available throughout the test file.
+**Why two imports?**
+
+- **`using module`** (compile-time) - Makes `MedocEventId` enum type available for assertions
+- **`Import-Module` in BeforeAll** (runtime) - Loads actual functions for testing
+- Both are required; do not remove either one
+
+This pattern ensures:
+
+1. Enum types are available during test compilation for type-safe assertions
+2. Module functions are loaded and ready for test execution
+3. Tests fail immediately if enum values drift from actual code
 
 ### Step 2: Reference Enum Values Directly in Tests
 

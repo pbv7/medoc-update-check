@@ -27,13 +27,18 @@ $content = "Your content with Cyrillic characters here"
 
 ### Checking File Encoding
 
-Verify encoding of existing files:
+Verify encoding of existing files.
 
-```powershell
+On **Linux/macOS:**
+
+```bash
 # Check encoding (should output "Windows-1251" or "CP1251")
 file -i test-file.log
+```
 
-# Or in PowerShell:
+On **Windows or with PowerShell 7+** (cross-platform):
+
+```powershell
 [System.Text.Encoding]::GetEncoding(1251).EncodingName
 ```
 
@@ -61,11 +66,11 @@ M.E.Doc update detection uses a two-log strategy. Each test scenario contains bo
    - Confirms .NET infrastructure validation passed
 
 2. **Service Restart Success**
-   - Pattern: `сервіс ZvitGrp запущен у нормальному` (service started normally)
+   - Pattern: `Службу\s+ZvitGrp\s+запущено` (service started; may include "з підвищенням прав" - with elevated privileges)
    - Confirms ZvitGrp service restarted successfully
 
 3. **Version Confirmation**
-   - Pattern: `новая версія - {TARGET_VERSION}` (new version - number)
+   - Pattern: `Версія\s+програми\s*-\s*{TARGET_VERSION}` (program version - number)
    - Confirms system reports expected version
 
 **Use case:** Validate successful update detection and message formatting
@@ -138,7 +143,7 @@ M.E.Doc update detection uses a two-log strategy. Each test scenario contains bo
 
 **Missing Flag:**
 
-- Pattern not found: `сервіс ZvitGrp запущен у нормальному`
+- Pattern not found: `Службу\s+ZvitGrp\s+запущено`
 - Indicates ZvitGrp service failed to restart or not logged
 
 **Use case:** Validate detection of service restart failures
@@ -156,7 +161,7 @@ M.E.Doc update detection uses a two-log strategy. Each test scenario contains bo
 
 **Missing Flag:**
 
-- Pattern not found: `новая версія - {TARGET_VERSION}`
+- Pattern not found: `Версія\s+програми\s*-\s*{TARGET_VERSION}`
 - Indicates system failed to confirm version or update failed
 
 **Use case:** Validate detection of version confirmation failures
@@ -195,8 +200,8 @@ M.E.Doc update detection uses a two-log strategy. Each test scenario contains bo
 **Missing Flags:**
 
 - Pattern not found: `IsProcessCheckPassed DI: True, AI: True` (Flag 1)
-- Pattern not found: `сервіс ZvitGrp запущен у нормальному` (Flag 2)
-- Pattern found: `новая версія - {TARGET_VERSION}` (Flag 3 present)
+- Pattern not found: `Службу\s+ZvitGrp\s+запущено` (Flag 2)
+- Pattern found: `Версія\s+програми\s*-\s*{TARGET_VERSION}` (Flag 3 present)
 
 **Failure Reason:**
 
@@ -227,9 +232,10 @@ identified and reported with the dedicated `MultipleFlagsFailed` error code
 
 **EncodingError (EventId 1204):** Tested via direct function calls in unit tests rather than
 scenario files. The `Test-UpdateOperationSuccess` function includes try/catch error handling
-for encoding issues during log file reading. This is exercised in the validation workflow but
-not via dedicated test data file scenario due to PowerShell's transparent encoding
-handling.
+for encoding issues during log file reading. Since PowerShell automatically handles encoding
+detection when reading files (transparent encoding conversion), encoding errors are exercised
+through explicit unit tests rather than file-based scenarios. The validation workflow tests
+this in `tests/MedocUpdateCheck.Tests.ps1` by simulating encoding failures directly.
 
 ---
 
@@ -273,8 +279,8 @@ dual-log-success/
 
 ```text
 25.10.25 10:30:15.100 00000001 INFO    IsProcessCheckPassed DI: True, AI: True
-25.10.25 10:45:32.250 00000002 INFO    сервіс ZvitGrp запущен у нормальному режимі
-25.10.25 11:00:00.000 00000003 INFO    новая версія - 186
+25.10.25 10:45:32.250 00000002 INFO    Службу ZvitGrp запущено
+25.10.25 11:00:00.000 00000003 INFO    Версія програми - 186
 ```
 
 ---

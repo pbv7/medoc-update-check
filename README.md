@@ -72,32 +72,6 @@ specialized guides as needed:
 
 ---
 
-## Folder Structure
-
-```text
-MedocUpdateCheck/
-├── Run.ps1                          # Main entry point (universal, don't edit)
-├── lib/
-│   └── MedocUpdateCheck.psm1        # Core reusable module (universal)
-├── configs/                         # Configuration files (per-server)
-│   └── Config.template.ps1          # Template for new servers (copy and customize)
-├── utils/                           # Utility scripts
-│   └── Setup-ScheduledTask.ps1      # Task Scheduler automation helper
-├── tests/                           # Automated tests
-│   ├── Run-Tests.ps1                # Test runner script
-│   ├── MedocUpdateCheck.Tests.ps1   # Pester test cases
-│   ├── test-data/                   # Sample log files
-│   └── README.md                    # Testing guide
-├── last_run_server01.txt            # Checkpoint for server 1 (auto-created)
-├── last_run_server02.txt            # Checkpoint for server 2 (auto-created)
-├── SECURITY.md                      # Security & credentials guide
-├── CODE_OF_CONDUCT.md               # Community guidelines
-├── LICENSE                          # Apache 2.0 license
-├── NOTICE                           # Attribution & dependencies
-├── TESTING.md                       # Comprehensive testing guide
-└── README.md                        # This file
-```
-
 ## Quick Start
 
 For complete step-by-step deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
