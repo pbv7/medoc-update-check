@@ -324,7 +324,7 @@ function Test-UpdateOperationSuccess {
 
             # Skip entries before checkpoint time if provided
             if ($SinceTime -and $timestamp -le $SinceTime) {
-                continue
+                break
             }
 
             # Found the latest update operation
