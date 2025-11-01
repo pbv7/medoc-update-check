@@ -274,13 +274,15 @@ function Test-UpdateOperationSuccess {
         }
     }
 
+    # Build encoding troubleshooting message (reused in multiple error handlers)
+    $encodingTroubleshoot = "Troubleshooting: Verify EncodingCodePage matches M.E.Doc log file encoding. Common supported values: $($validCodePages -join ', ')."
+
     # Read Planner.log with encoding error handling
     try {
         $lines = Get-Content $PlannerLogPath -Encoding $Encoding
     } catch {
         $errorMsg = "Error reading Planner.log with encoding $EncodingCodePage : $_`n"
-        $errorMsg += "Troubleshooting: Verify EncodingCodePage matches M.E.Doc log file encoding. "
-        $errorMsg += "Common values: 1251 (Windows-1251, default), 65001 (UTF-8), 1200 (UTF-16 LE). "
+        $errorMsg += "$encodingTroubleshoot "
         $errorMsg += "Ensure Planner.log file is accessible and not locked by another process."
         Write-EventLogEntry -Message $errorMsg -EventType Error -EventId ([MedocEventId]::EncodingError)
         Write-Error $errorMsg
@@ -386,8 +388,7 @@ function Test-UpdateOperationSuccess {
         $updateLogLines = @(Get-Content $updateLogPath -Encoding $Encoding)
     } catch {
         $errorMsg = "Error reading update log $updateLogPath with encoding $EncodingCodePage : $_`n"
-        $errorMsg += "Troubleshooting: Verify EncodingCodePage matches M.E.Doc log file encoding. "
-        $errorMsg += "Common values: 1251 (Windows-1251, default), 65001 (UTF-8), 1200 (UTF-16 LE). "
+        $errorMsg += "$encodingTroubleshoot "
         $errorMsg += "Ensure update log file is accessible and not locked by another process."
         Write-EventLogEntry -Message $errorMsg -EventType Error -EventId ([MedocEventId]::EncodingError)
         Write-Error $errorMsg
