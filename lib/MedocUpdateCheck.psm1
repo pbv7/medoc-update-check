@@ -553,7 +553,8 @@ function Write-EventLogEntry {
             try {
                 [System.Diagnostics.EventLog]::CreateEventSource($EventLogSource, $EventLogName)
             } catch {
-                # May fail if running without admin privileges
+                # May fail if running without admin privileges or Event Log is unavailable
+                # When creation fails, we cannot write to Event Log - warn and exit gracefully
                 Write-Warning "Could not create Event Log source: $_"
                 return
             }
