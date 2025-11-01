@@ -94,7 +94,7 @@ function Format-UpdateTelegramMessage {
         Format update result into human-readable Telegram message with emoji
 
     .PARAMETER UpdateResult
-        Result object from Test-UpdateOperationSuccess (can be $null for no update)
+        Result object from Test-UpdateOperationSuccess with Status/ErrorId/Success properties
 
     .PARAMETER ServerName
         Server name for display
@@ -160,7 +160,7 @@ function Format-UpdateEventLogMessage {
         Format update result into structured Event Log message (key=value format)
 
     .PARAMETER UpdateResult
-        Result object from Test-UpdateOperationSuccess (can be $null for no update)
+        Result object from Test-UpdateOperationSuccess with Status/ErrorId/Success properties
 
     .PARAMETER ServerName
         Server name for display
@@ -220,8 +220,9 @@ function Test-UpdateOperationSuccess {
         Log file encoding (default: 1251 for Windows-1251/Cyrillic)
 
     .OUTPUTS
-        $null if no update found
-        Hashtable with the following keys if update found:
+        Always returns a hashtable with the following keys:
+        - Status: "Success", "Failed", "NoUpdate", or "Error"
+        - ErrorId: Event ID from [MedocEventId] enum
         - Success: $true if all success flags present, $false if any flag missing
         - FromVersion: Starting version (e.g., "11.02.183")
         - ToVersion: Target version (e.g., "11.02.184")
@@ -234,7 +235,7 @@ function Test-UpdateOperationSuccess {
         - Flag1_Infrastructure: $true if "IsProcessCheckPassed DI: True, AI: True" found
         - Flag2_ServiceRestart: $true if "Службу ZvitGrp запущено" found
         - Flag3_VersionConfirm: $true if "Версія програми - {VERSION}" found
-        - Reason: Human-readable reason for failure (e.g., "Missing success flags")
+        - Reason: Human-readable reason for status (e.g., "All success flags confirmed" or "Missing success flags")
 
     .NOTES
         Strategy: Dual-log validation
