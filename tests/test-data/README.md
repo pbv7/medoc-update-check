@@ -36,10 +36,12 @@ On **Linux/macOS:**
 file -i test-file.log
 ```
 
-On **Windows or with PowerShell 7+** (cross-platform):
+On **Windows or with PowerShell 7+** (cross-platform, verify content):
 
 ```powershell
-[System.Text.Encoding]::GetEncoding(1251).EncodingName
+# Read first 5 lines with Windows-1251 encoding
+# Cyrillic characters should display correctly
+Get-Content -Path test-file.log -Encoding ([System.Text.Encoding]::GetEncoding(1251)) -TotalCount 5
 ```
 
 ---
@@ -232,10 +234,11 @@ identified and reported with the dedicated `MultipleFlagsFailed` error code
 
 **EncodingError (EventId 1204):** Tested via direct function calls in unit tests rather than
 scenario files. The `Test-UpdateOperationSuccess` function includes try/catch error handling
-for encoding issues during log file reading. Since PowerShell automatically handles encoding
-detection when reading files (transparent encoding conversion), encoding errors are exercised
-through explicit unit tests rather than file-based scenarios. The validation workflow tests
-this in `tests/MedocUpdateCheck.Tests.ps1` by simulating encoding failures directly.
+for encoding issues during log file reading. Since the script explicitly specifies the Windows-1251
+encoding when reading log files, PowerShell correctly interprets the content. This explicit
+handling makes the code robust, and encoding errors are exercised through explicit unit tests
+rather than file-based scenarios. The validation workflow tests this in `tests/MedocUpdateCheck.Tests.ps1`
+by simulating encoding failures directly.
 
 ---
 
