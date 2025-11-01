@@ -670,7 +670,7 @@ function Invoke-MedocUpdateCheck {
     }
 
     # Set defaults for optional config
-    if (-not $Config.ContainsKey("EncodingCodePage")) { $Config.EncodingCodePage = 1251 }
+    if (-not $Config.ContainsKey("EncodingCodePage")) { $Config.EncodingCodePage = $defaultCodePage }
     if (-not $Config.ContainsKey("EventLogSource")) { $Config.EventLogSource = "M.E.Doc Update Check" }
 
     # EncodingCodePage validation: must be valid Windows codepage (with fallback to default)
