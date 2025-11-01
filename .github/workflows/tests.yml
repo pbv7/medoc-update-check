@@ -130,48 +130,13 @@ jobs:
         name: pester-coverage
         path: coverage.xml
 
-    - name: Display Coverage Summary
-      if: always()
-      shell: pwsh
-      run: |
-        if (Test-Path coverage.xml) {
-          try {
-            # Get the LAST (summary) LINE counter from the report
-            # JaCoCo structure: multiple counters at different levels, summary is last
-            $covNodes = Select-Xml -Path coverage.xml -XPath "//counter[@type='LINE']" |
-              Select-Object -ExpandProperty Node
-
-            # Get the last counter (the overall summary at report level)
-            $covNode = $covNodes[-1]
-
-            if ($covNode) {
-              $covered = [int]$covNode.covered
-              $missed = [int]$covNode.missed
-              $total = $covered + $missed
-
-              if ($total -gt 0) {
-                $percent = [math]::Round(($covered / $total) * 100, 2)
-                Write-Host "## Code Coverage: $percent% ($covered of $total lines covered)"
-              } else {
-                Write-Host "## No coverage data found (coverage.xml is empty or has no counters)"
-              }
-            } else {
-              Write-Host "## No LINE counter found in coverage.xml"
-            }
-          } catch {
-            Write-Host "## Error parsing coverage data: $_"
-          }
-        } else {
-          Write-Host "## Coverage file not found (coverage.xml not generated)"
-        }
-    
-    - name: Print Summary Report
+    - name: Print Test & Coverage Summary Report
       if: always()
       shell: pwsh
       run: |
         Write-Host "### 🧪 Test & Coverage Summary"
 
-        # Load test results
+        # --- Load test results ---
         if (Test-Path test-results.xml) {
           [xml]$tr = Get-Content test-results.xml
           $executed = ($tr.testsuites.testsuite | Measure-Object -Sum tests).Sum
@@ -181,10 +146,16 @@ jobs:
           $executed = 0; $failed = 0; $passed = 0
         }
 
-        # Load coverage results
+        # --- Load coverage results (single calculation, no duplication) ---
+        # Get the LAST (summary) LINE counter from report root level
+        # JaCoCo structure: multiple counters at different levels, summary is last
+        $covPct = 0
+        $covered = 0
+        $missed = 0
+        $covDetails = ""
+
         if (Test-Path coverage.xml) {
           try {
-            # Get the LAST (summary) LINE counter from report root level
             $covNodes = Select-Xml -Path coverage.xml -XPath "//counter[@type='LINE']" |
               Select-Object -ExpandProperty Node
 
@@ -194,29 +165,36 @@ jobs:
               $covered = [int]$c.covered
               $missed  = [int]$c.missed
               $total   = $covered + $missed
+
               if ($total -gt 0) {
                 $covPct = [math]::Round( ($covered / $total) * 100, 2 )
+                $covDetails = "$covered of $total lines"
               } else {
                 $covPct = 0
+                $covDetails = "no data"
               }
             } else {
-              $covered = 0; $missed = 0; $covPct = 0
+              $covDetails = "no counters"
             }
           } catch {
-            $covered = 0; $missed = 0; $covPct = 0
+            Write-Host "⚠️ Warning: Could not parse coverage data: $_" -ForegroundColor Yellow
+            $covDetails = "parse error"
           }
         } else {
-          $covered = 0; $missed = 0; $covPct = 0
+          $covDetails = "file not found"
         }
 
+        # --- Display summary table ---
         Write-Host ""
-        Write-Host "| Metric        | Value             |"
-        Write-Host "|---------------|-------------------|"
+        Write-Host "| Metric        | Value                    |"
+        Write-Host "|---------------|--------------------------|"
         Write-Host ("| Tests Run      | {0}" -f $executed)
         Write-Host ("| Tests Passed   | {0}" -f $passed)
         Write-Host ("| Tests Failed   | {0}" -f $failed)
-        Write-Host ("| Coverage %     | {0}%" -f $covPct)
+        Write-Host ("| Coverage %     | {0}% ({1})" -f $covPct, $covDetails)
         Write-Host ""
+
+        # --- Status assessment ---
         if ($failed -gt 0 -or $covPct -lt 80) {
           Write-Host "⚠️ **Attention**: Some tests failed or coverage is below threshold."
         } else {
