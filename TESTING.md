@@ -626,7 +626,7 @@ This displays:
 
 - `-Coverage` - Enable code coverage measurement
 - `-Verbose` - Show detailed test output
-- `-Filter "pattern"` - Run only tests matching pattern
+- `-Filter "pattern"` - Run only tests matching pattern (use wildcards: `*` for any chars, `?` for single char, or exact match)
 - `-PassThru` - Return test results object for further processing
 
 #### Direct Pester Invocation

@@ -18,7 +18,7 @@
     Show detailed test output
 
 .PARAMETER Filter
-    Filter tests by name pattern
+    Filter tests by name pattern (supports wildcards: * for any characters, ? for single character)
 
 .PARAMETER PassThru
     Return test results object for further processing
@@ -109,7 +109,7 @@ if ($Coverage) {
         $config.Output.Verbosity = "Detailed"
     }
     if ($Filter) {
-        $config.Filter.FullName = "*$Filter*"
+        $config.Filter.FullName = $Filter
     }
 
     Write-Host "Code coverage: ENABLED" -ForegroundColor Cyan
@@ -141,7 +141,7 @@ if ($Coverage) {
     }
 
     if ($Filter) {
-        $pesterParams["FullNameFilter"] = "*$Filter*"
+        $pesterParams["FullNameFilter"] = $Filter
     }
 
     # Run tests without coverage
