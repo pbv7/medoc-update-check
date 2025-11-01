@@ -474,7 +474,7 @@ Project Root/
    Invoke-Pester tests/MedocUpdateCheck.Tests.ps1
 
    # Run with coverage
-   .\tests\Run-Tests.ps1 -OutputFormat JUnitXml
+   .\tests\Run-Tests.ps1 -Coverage
    ```
 
 ### Test Template

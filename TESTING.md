@@ -557,14 +557,14 @@ Run only Test-UpdateOperationSuccess tests:
 
 ```powershell
 Invoke-Pester -Path "tests/MedocUpdateCheck.Tests.ps1" -Verbose `
-    -Filter @{ Name = "*Test-UpdateOperationSuccess*" }
+    -FullNameFilter "*Test-UpdateOperationSuccess*"
 ```
 
 Run only unit tests:
 
 ```powershell
 Invoke-Pester -Path "tests/MedocUpdateCheck.Tests.ps1" -Verbose `
-    -Filter @{ Name = "*Unit Tests*" }
+    -FullNameFilter "*Unit Tests*"
 ```
 
 ### Running with Output
@@ -626,8 +626,8 @@ This displays:
 
 - `-Coverage` - Enable code coverage measurement
 - `-Verbose` - Show detailed test output
-- `-Filter "pattern"` - Run only tests matching pattern
-- `-OutputFormat Detailed|Summary|None` - Control output level
+- `-Filter "pattern"` - Run only tests matching pattern (use wildcards: `*` for any chars, `?` for single char, or exact match)
+- `-PassThru` - Return test results object for further processing
 
 #### Direct Pester Invocation
 
@@ -818,7 +818,7 @@ It "Should encrypt and decrypt credential data successfully" -Skip:(
 
 # Filter to run only CMS tests:
 Invoke-Pester -Path ./tests/MedocUpdateCheck.Tests.ps1 `
-    -Filter @{ Name = "*CMS*" }
+    -FullNameFilter "*CMS*"
 ```
 
 **Behavior on Non-Windows (Development/CI):**
@@ -868,7 +868,7 @@ Describe "Setup-ScheduledTask.ps1 - Task Scheduler Integration" {
 
 # Filter to run only setup tests:
 Invoke-Pester -Path ./tests/Utilities.Tests.ps1 `
-    -Filter @{ Name = "*Setup*" }
+    -FullNameFilter "*Setup*"
 ```
 
 **Behavior on Non-Windows (Development/CI):**

@@ -21,7 +21,7 @@ Invoke-Pester -Path tests/MedocUpdateCheck.Tests.ps1 -PassThru
 
 ```powershell
 Invoke-Pester -Path tests/MedocUpdateCheck.Tests.ps1 `
-  -FullyQualifiedName "*should detect successful update*"
+  -FullNameFilter "*should detect successful update*"
 ```
 
 ## Test Coverage

@@ -12,16 +12,13 @@
 
 .DESCRIPTION
     Runs all automated tests and provides a summary report.
-    Supports different output formats and test filtering.
+    Supports code coverage measurement and test filtering.
 
 .PARAMETER Verbose
     Show detailed test output
 
-.PARAMETER OutputFormat
-    Output format: None, Detailed, Summary (default: Summary)
-
 .PARAMETER Filter
-    Filter tests by name pattern
+    Filter tests by name pattern (supports wildcards: * for any characters, ? for single character)
 
 .PARAMETER PassThru
     Return test results object for further processing
@@ -50,8 +47,6 @@
 
 param(
     [switch]$Verbose,
-    [ValidateSet("None", "Detailed", "Summary")]
-    [string]$OutputFormat = "Summary",
     [string]$Filter,
     [switch]$PassThru,
     [switch]$Coverage
@@ -114,7 +109,7 @@ if ($Coverage) {
         $config.Output.Verbosity = "Detailed"
     }
     if ($Filter) {
-        $config.Filter.FullyQualifiedName = "*$Filter*"
+        $config.Filter.FullName = $Filter
     }
 
     Write-Host "Code coverage: ENABLED" -ForegroundColor Cyan
@@ -146,7 +141,7 @@ if ($Coverage) {
     }
 
     if ($Filter) {
-        $pesterParams["Filter"] = @{ Name = $Filter }
+        $pesterParams["FullNameFilter"] = $Filter
     }
 
     # Run tests without coverage
