@@ -13,10 +13,10 @@
 #>
 
 # Essential Windows codepages for M.E.Doc environments
-# 1251: Cyrillic (Windows) - default for M.E.Doc
-# 65001: Unicode (UTF-8)
-# 1200: Unicode (UTF-16 LE)
-$validCodePages = @(1251, 65001, 1200)
+# Default: 1251 (Cyrillic - Windows-1251)
+# Other supported: 65001 (UTF-8), 1200 (UTF-16 LE)
+$defaultCodePage = 1251
+$validCodePages = @($defaultCodePage, 65001, 1200)
 
 <#
 .SYNOPSIS
@@ -161,17 +161,18 @@ function Test-EncodingCodePage {
 
     # Check if it's one of the supported encodings
     if ($EncodingCodePage -notin $validCodePages) {
+        $validList = $validCodePages -join ', '
         if ($UseDefault) {
             return @{
                 Valid        = $true
                 IsWarning    = $true
-                ErrorMessage = "EncodingCodePage $EncodingCodePage is not supported (valid: 1251, 65001, 1200). Using default 1251 instead."
-                DefaultValue = 1251
+                ErrorMessage = "EncodingCodePage $EncodingCodePage is not supported (valid: $validList). Using default $defaultCodePage instead."
+                DefaultValue = $defaultCodePage
             }
         } else {
             return @{
                 Valid        = $false
-                ErrorMessage = "EncodingCodePage is not supported: $EncodingCodePage (valid: 1251, 65001, 1200)"
+                ErrorMessage = "EncodingCodePage is not supported: $EncodingCodePage (valid: $validList)"
             }
         }
     }
@@ -223,4 +224,4 @@ Export-ModuleMember -Function @(
     'Test-ChatId',
     'Test-EncodingCodePage',
     'Test-CheckpointPath'
-) -Variable 'validCodePages'
+) -Variable @('defaultCodePage', 'validCodePages')
