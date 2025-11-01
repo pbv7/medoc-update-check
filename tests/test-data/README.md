@@ -32,9 +32,21 @@ Verify encoding of existing files.
 On **Linux/macOS:**
 
 ```bash
-# Check encoding (should output "Windows-1251" or "CP1251")
-file -i test-file.log
+# Option 1: Using file command (may report iso-8859-1 for Windows-1251 without BOM)
+file --mime-encoding test-file.log
+
+# Option 2: Using uchardet (more reliable for Windows-1251 detection)
+uchardet test-file.log
+
+# Option 3: Using enca (better support for legacy encodings)
+enca test-file.log
 ```
+
+**Note:** `file` uses heuristics and may not reliably detect Windows-1251 without BOM markers.
+For accurate encoding detection, install `uchardet` or `enca`:
+
+- **macOS:** `brew install uchardet` or `brew install enca`
+- **Linux:** `sudo apt-get install uchardet` or `sudo apt-get install enca`
 
 On **Windows or with PowerShell 7+** (cross-platform, verify content):
 
