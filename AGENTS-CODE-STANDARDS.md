@@ -302,8 +302,16 @@ international audiences and requires universal code clarity.
 ```powershell
 # Phase 1: Search from end to find latest update operation
 # We search backwards for efficiency since we only need the most recent
+# When checkpoint (SinceTime) is provided, exit early when first strictly older record found
+# (all remaining records will also be older due to chronological ordering)
 for ($i = $lines.Count - 1; $i -ge 0; $i--) {
     # Process line
+
+    # Checkpoint optimization: break only when a record is strictly older than the checkpoint
+    # Records with timestamp equal to checkpoint are still processed (may contain updates at same second)
+    if ($SinceTime -and $timestamp -lt $SinceTime) {
+        break  # Exit loop - all remaining records are definitely older
+    }
 }
 ```
 

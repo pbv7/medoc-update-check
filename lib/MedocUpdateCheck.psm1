@@ -322,9 +322,10 @@ function Test-UpdateOperationSuccess {
             }
             $logEvent = $matches[3]
 
-            # Skip entries before checkpoint time if provided
-            if ($SinceTime -and $timestamp -le $SinceTime) {
-                continue
+            # Break only when records are strictly older than checkpoint
+            # Records with timestamp equal to checkpoint are still processed (may contain new updates)
+            if ($SinceTime -and $timestamp -lt $SinceTime) {
+                break
             }
 
             # Found the latest update operation
