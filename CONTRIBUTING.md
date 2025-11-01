@@ -1297,7 +1297,8 @@ function Test-UpdateOperationSuccess {
         - Flag3_VersionConfirm: [bool] Version confirmation flag
         - Reason: [string] Human-readable status message
 
-        Returns $null if no update found or validation fails.
+        Always returns a hashtable with Status/ErrorId/Success properties.
+        Status values: Success, Failed, NoUpdate, or Error.
 
     .EXAMPLE
         $result = Test-UpdateOperationSuccess -MedocLogsPath "D:\MedocSRV\LOG"
@@ -1528,13 +1529,13 @@ Write-Host "All flags confirmed: $($result.Flag1_Infrastructure -and $result.Fla
 
 | Scenario | Directory | Expected Result |
 |----------|-----------|-----------------|
-| Successful | dual-log-success | Success = $true, all flags = $true |
-| No Updates | dual-log-no-update | $null (no update detected) |
-| Missing Flag 1 | dual-log-missing-flag1 | Success = $false (infrastructure flag missing) |
-| Missing Flag 2 | dual-log-missing-flag2 | Success = $false (service restart flag missing) |
-| Missing Flag 3 | dual-log-missing-flag3 | Success = $false (version confirmation missing) |
-| Failed Update | dual-log-failed | Success = $false (update did not complete) |
-| Timeout | dual-log-timeout | $null (exceeded timeout) |
+| Successful | dual-log-success | Status = "Success", all flags = $true |
+| No Updates | dual-log-no-update | Status = "NoUpdate", ErrorId = NoUpdate (1001) |
+| Missing Flag 1 | dual-log-missing-flag1 | Status = "Failed", Success = $false (infrastructure flag missing) |
+| Missing Flag 2 | dual-log-missing-flag2 | Status = "Failed", Success = $false (service restart flag missing) |
+| Missing Flag 3 | dual-log-missing-flag3 | Status = "Failed", Success = $false (version confirmation missing) |
+| Failed Update | dual-log-failed | Status = "Failed", Success = $false (update did not complete) |
+| Missing Log | dual-log-missing-log | Status = "Failed", ErrorId = UpdateLogMissing (1201) |
 
 ---
 
