@@ -217,7 +217,7 @@ function Test-UpdateOperationSuccess {
         Optional: Only search for updates after this timestamp (for checkpoint filtering)
 
     .PARAMETER EncodingCodePage
-        Log file encoding (default: 1251 for Windows-1251/Cyrillic)
+        Log file encoding code page (default: $defaultCodePage)
 
     .OUTPUTS
         Always returns a hashtable with the following keys:
@@ -256,7 +256,7 @@ function Test-UpdateOperationSuccess {
         $SinceTime,
 
         [Parameter(Mandatory = $false)]
-        [int]$EncodingCodePage = 1251
+        [int]$EncodingCodePage = $defaultCodePage
     )
 
     $Encoding = [System.Text.Encoding]::GetEncoding($EncodingCodePage)
