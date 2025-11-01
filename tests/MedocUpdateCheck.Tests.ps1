@@ -1,3 +1,5 @@
+#Requires -Version 7.0
+
 # PSScriptAnalyzer Note: This test file uses unused mock function parameters.
 # These are intentional - mock function signatures match the real functions they replace,
 # even when specific parameters aren't used in a particular test scenario.
