@@ -157,10 +157,10 @@ edited, making references stale and misleading.
 ### ❌ DON'T (Fragile - will break on edits)
 
 ```markdown
-See lib/MedocUpdateCheck.psm1 (lines 21-52) for the enum definition.
-Uses .NET EventLog class (lib/MedocUpdateCheck.psm1:195-212).
-Update the outcome mapping (line ~804 in module).
-TESTING.md lines 217-226 show the quick reference.
+See lib/MedocUpdateCheck.psm1 (lines XX-YY) for the enum definition.
+Uses .NET EventLog class (lib/MedocUpdateCheck.psm1:AAA-BBB).
+Update the outcome mapping (around line ZZZ in module).
+TESTING.md lines CCC-DDD show the quick reference.
 ```
 
 ### ✅ DO (Stable - survives code edits)

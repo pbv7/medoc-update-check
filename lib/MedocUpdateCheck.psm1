@@ -452,12 +452,10 @@ function Test-UpdateOperationSuccess {
 
     # Check Flag 2: Service Restart Success
     # Looks for: "Службу ZvitGrp запущено" (may include "з підвищенням прав")
-    # Message format in M.E.Doc update logs (Windows-1251 encoding)
     $hasServiceRestart = $updateLogContent -match 'Службу\s+ZvitGrp\s+запущено'
 
     # Check Flag 3: Version Confirmation
     # Looks for: "Версія програми - {TARGET_VERSION}" (exact version number from update)
-    # Message format in M.E.Doc update logs (Windows-1251 encoding)
     $hasVersionConfirm = $updateLogContent -match "Версія\s+програми\s*-\s*$targetVersionNum\b"
 
     # Success only if ALL 3 flags present
@@ -555,7 +553,8 @@ function Write-EventLogEntry {
             try {
                 [System.Diagnostics.EventLog]::CreateEventSource($EventLogSource, $EventLogName)
             } catch {
-                # May fail if running without admin privileges
+                # May fail if running without admin privileges or Event Log is unavailable
+                # When creation fails, we cannot write to Event Log - warn and exit gracefully
                 Write-Warning "Could not create Event Log source: $_"
                 return
             }
@@ -590,7 +589,7 @@ function Invoke-MedocUpdateCheck {
 
         Optional keys:
         - LastRunFile: Path to checkpoint file (if not provided, uses $env:ProgramData\MedocUpdateCheck\checkpoints\)
-        - EncodingCodePage: Log file encoding (default: 1251 for Windows-1251)
+        - EncodingCodePage: Log file encoding code page (default: $defaultCodePage)
         - EventLogSource: Event Log source name (default: "M.E.Doc Update Check")
 
     .OUTPUTS
@@ -602,7 +601,7 @@ function Invoke-MedocUpdateCheck {
           * Error: Configuration, I/O, or notification transport error
         - EventId: [int] from MedocEventId enum (for Event Log tracing)
         - NotificationSent: [bool] - whether notification reached Telegram
-        - UpdateResult: [hashtable] from Test-UpdateOperationSuccess (when available) or $null on config/transport errors
+        - UpdateResult: [hashtable] from Test-UpdateOperationSuccess (when test was executed) or $null if config validation failed before test
 
     .EXAMPLE
         $result = Invoke-MedocUpdateCheck -Config $config
@@ -697,9 +696,14 @@ function Invoke-MedocUpdateCheck {
         # Create directory if it doesn't exist
         if (-not (Test-Path $checkpointDir)) {
             try {
-                New-Item -ItemType Directory -Path $checkpointDir -Force | Out-Null
+                # Use -ErrorAction Stop to convert non-terminating errors to exceptions (catch them in the catch block)
+                New-Item -ItemType Directory -Path $checkpointDir -Force -ErrorAction Stop | Out-Null
             } catch {
-                Write-EventLogEntry -Message "Failed to create checkpoint directory: $_" -EventType Error -EventId ([MedocEventId]::CheckpointDirCreationFailed)
+                # Cannot create checkpoint directory = cannot persist state = blocking error
+                $errorMsg = "Failed to create checkpoint directory: $_"
+                Write-EventLogEntry -Message $errorMsg -EventType Error -EventId ([MedocEventId]::CheckpointDirCreationFailed)
+                Write-Error $errorMsg
+                return (New-OutcomeObject -Outcome 'Error' -EventId ([MedocEventId]::CheckpointDirCreationFailed) -NotificationSent:$false -UpdateResult $null)
             }
         }
 
@@ -711,9 +715,14 @@ function Invoke-MedocUpdateCheck {
         $checkpointDir = Split-Path -Parent $Config.LastRunFile
         if (-not (Test-Path $checkpointDir)) {
             try {
-                New-Item -ItemType Directory -Path $checkpointDir -Force | Out-Null
+                # Use -ErrorAction Stop to convert non-terminating errors to exceptions (catch them in the catch block)
+                New-Item -ItemType Directory -Path $checkpointDir -Force -ErrorAction Stop | Out-Null
             } catch {
-                Write-EventLogEntry -Message "Failed to create checkpoint directory: $_" -EventType Error -EventId ([MedocEventId]::CheckpointDirCreationFailed)
+                # Cannot create checkpoint directory = cannot persist state = blocking error
+                $errorMsg = "Failed to create checkpoint directory: $_"
+                Write-EventLogEntry -Message $errorMsg -EventType Error -EventId ([MedocEventId]::CheckpointDirCreationFailed)
+                Write-Error $errorMsg
+                return (New-OutcomeObject -Outcome 'Error' -EventId ([MedocEventId]::CheckpointDirCreationFailed) -NotificationSent:$false -UpdateResult $null)
             }
         }
     }
