@@ -8,9 +8,15 @@
     Shows all available configuration options with explanations.
 
 .USAGE
-    1. Copy this file: cp Config.template.ps1 Config-MyServer.ps1
-    2. Edit Config-MyServer.ps1 with your server's specific settings
-    3. Run with your config: .\Run.ps1 -ConfigPath ".\configs\Config-MyServer.ps1"
+    Single Server (recommended):
+        cp configs\Config.template.ps1 "configs\Config-$env:COMPUTERNAME.ps1"
+        .\Run.ps1 -ConfigPath ".\configs\Config-$env:COMPUTERNAME.ps1"
+
+    Multiple Servers (e.g., monitoring from central location):
+        cp configs\Config.template.ps1 "configs\Config-MainServer.ps1"
+        cp configs\Config.template.ps1 "configs\Config-BackupServer.ps1"
+        .\Run.ps1 -ConfigPath ".\configs\Config-MainServer.ps1"
+        .\Run.ps1 -ConfigPath ".\configs\Config-BackupServer.ps1"
 
 .SECURITY NOTE
     Use Setup-Credentials.ps1 to store BotToken and ChatId securely.
@@ -84,10 +90,11 @@ $config = @{
     # RECOMMENDATION: Leave commented to use auto-generated checkpoint file
 
     # Log file encoding code page (for reading M.E.Doc logs)
-    # DEFAULT: 1251 (Windows-1251 / Cyrillic - used by M.E.Doc)
-    # Other values:
-    #   - 65001 = UTF-8
-    #   - 1252 = Windows-1252 (Western European)
+    # IMPORTANT: M.E.Doc uses Windows-1251 (Cyrillic) encoding
+    # DEFAULT: 1251 (Windows-1251 / Cyrillic)
+    # Alternative values:
+    #   - 1200 = UTF-16 LE (Windows Unicode native)
+    #   - 65001 = UTF-8 (Unicode text)
     # CHANGE ONLY IF: Your M.E.Doc installation uses different encoding
     EncodingCodePage = 1251
 
