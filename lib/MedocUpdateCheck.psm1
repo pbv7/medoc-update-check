@@ -696,7 +696,8 @@ function Invoke-MedocUpdateCheck {
         # Create directory if it doesn't exist
         if (-not (Test-Path $checkpointDir)) {
             try {
-                New-Item -ItemType Directory -Path $checkpointDir -Force | Out-Null
+                # Use -ErrorAction Stop to convert non-terminating errors to exceptions (catch them in the catch block)
+                New-Item -ItemType Directory -Path $checkpointDir -Force -ErrorAction Stop | Out-Null
             } catch {
                 # Cannot create checkpoint directory = cannot persist state = blocking error
                 $errorMsg = "Failed to create checkpoint directory: $_"
@@ -714,7 +715,8 @@ function Invoke-MedocUpdateCheck {
         $checkpointDir = Split-Path -Parent $Config.LastRunFile
         if (-not (Test-Path $checkpointDir)) {
             try {
-                New-Item -ItemType Directory -Path $checkpointDir -Force | Out-Null
+                # Use -ErrorAction Stop to convert non-terminating errors to exceptions (catch them in the catch block)
+                New-Item -ItemType Directory -Path $checkpointDir -Force -ErrorAction Stop | Out-Null
             } catch {
                 # Cannot create checkpoint directory = cannot persist state = blocking error
                 $errorMsg = "Failed to create checkpoint directory: $_"
