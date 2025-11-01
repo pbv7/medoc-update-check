@@ -452,12 +452,10 @@ function Test-UpdateOperationSuccess {
 
     # Check Flag 2: Service Restart Success
     # Looks for: "Службу ZvitGrp запущено" (may include "з підвищенням прав")
-    # Message format in M.E.Doc update logs (Windows-1251 encoding)
     $hasServiceRestart = $updateLogContent -match 'Службу\s+ZvitGrp\s+запущено'
 
     # Check Flag 3: Version Confirmation
     # Looks for: "Версія програми - {TARGET_VERSION}" (exact version number from update)
-    # Message format in M.E.Doc update logs (Windows-1251 encoding)
     $hasVersionConfirm = $updateLogContent -match "Версія\s+програми\s*-\s*$targetVersionNum\b"
 
     # Success only if ALL 3 flags present
