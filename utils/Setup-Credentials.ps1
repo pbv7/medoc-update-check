@@ -75,6 +75,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Import validation helpers
+$configValidationPath = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'lib/ConfigValidation.psm1'
+Import-Module $configValidationPath -Force
+
 # Verify Administrator
 $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = [Security.Principal.WindowsPrincipal]::new($currentUser)
@@ -275,7 +279,26 @@ if (-not $BotToken) {
     Write-Host "Example: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz1234567890"
     Write-Host ""
     $BotTokenSecure = Read-Host "Bot Token" -AsSecureString
+
+    # Validate by temporarily converting to plain text
+    # Using System.Net.NetworkCredential for PS 7.0+ compatibility (ConvertFrom-SecureString -AsPlainText requires 7.4+)
+    try {
+        $plainTextForValidation = [System.Net.NetworkCredential]::new('', $BotTokenSecure).Password
+        $botTokenValidation = Test-BotToken -BotToken $plainTextForValidation
+        if (-not $botTokenValidation.Valid) {
+            Write-Error "ERROR: $($botTokenValidation.ErrorMessage)"
+            exit 1
+        }
+    } finally {
+        Clear-Variable plainTextForValidation -ErrorAction SilentlyContinue  # Remove plain text from memory
+    }
 } else {
+    # Validate Bot Token from parameter
+    $botTokenValidation = Test-BotToken -BotToken $BotToken
+    if (-not $botTokenValidation.Valid) {
+        Write-Error "ERROR: $($botTokenValidation.ErrorMessage)"
+        exit 1
+    }
     $BotTokenSecure = ConvertTo-SecureString -String $BotToken -AsPlainText -Force
 }
 
@@ -285,19 +308,18 @@ if (-not $ChatId) {
     Write-Host "For private chat: positive number (e.g., 123456789)"
     Write-Host "For channel: negative number (e.g., -1002825825746)"
     Write-Host ""
-    $ChatIdInput = Read-Host "Chat ID"
-} else {
-    $ChatIdInput = $ChatId
+    $ChatId = Read-Host "Chat ID"
 }
 
-# Validate chat ID (should be numeric, positive or negative)
-if ($ChatIdInput -notmatch '^-?\d+$') {
-    Write-Error "ERROR: Invalid chat ID format. Expected: numeric (positive or negative)"
+# Validate Chat ID
+$chatIdValidation = Test-ChatId -ChatId $ChatId
+if (-not $chatIdValidation.Valid) {
+    Write-Error "ERROR: $($chatIdValidation.ErrorMessage)"
     exit 1
 }
 
 # Convert chat ID to SecureString for processing (PII)
-$ChatIdSecure = ConvertTo-SecureString -String $ChatIdInput -AsPlainText -Force
+$ChatIdSecure = ConvertTo-SecureString -String $ChatId -AsPlainText -Force
 
 # Get or create certificate for encryption
 Write-Host ""
