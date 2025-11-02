@@ -17,6 +17,7 @@
 .PARAMETER RunScriptPath
     Full path to the launcher script - the main M.E.Doc Update Check entry point
     (default: Run.ps1 in project root)
+    Alias: ScriptPath (for backward compatibility with earlier versions)
 
 .PARAMETER ConfigPath
     Path to server configuration file (REQUIRED)
@@ -43,7 +44,10 @@
 #>
 
 param(
+    [Parameter(Mandatory = $false)]
+    [Alias('ScriptPath')]
     [string]$RunScriptPath = (Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Run.ps1'),
+
     [string]$ConfigPath,
     [string]$TaskName = "M.E.Doc Update Check",
     [string]$ScheduleTime = "08:00"
@@ -83,10 +87,17 @@ if (-not $ConfigPath) {
 # when the scheduled task executes in a different working directory context
 if (-not [System.IO.Path]::IsPathRooted($ConfigPath)) {
     $projectRoot = Split-Path -Parent $PSScriptRoot
-    $resolvedPath = Resolve-Path -Path (Join-Path -Path $projectRoot -ChildPath $ConfigPath) -ErrorAction SilentlyContinue
+    $pathFromRoot = Join-Path -Path $projectRoot -ChildPath $ConfigPath
+    $resolvedPath = Resolve-Path -Path $pathFromRoot -ErrorAction SilentlyContinue
     if ($resolvedPath) {
         $ConfigPath = $resolvedPath.Path
         Write-Host "✓ Resolved config path to absolute: $ConfigPath"
+    } else {
+        # Fail explicitly to prevent creating a misconfigured scheduled task
+        Write-Error "ERROR: Failed to resolve config file path from project root"
+        Write-Error "Tried: $pathFromRoot"
+        Write-Error "Use an absolute path or provide path relative to project root"
+        exit 1
     }
 }
 
