@@ -76,7 +76,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # Import validation helpers
-$configValidationPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "..") -ChildPath "lib\ConfigValidation.psm1"
+$configValidationPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "..") -ChildPath "lib/ConfigValidation.psm1"
 Import-Module $configValidationPath -Force
 
 # Verify Administrator
@@ -304,10 +304,9 @@ if (-not $chatIdValidation.Valid) {
     Write-Error "ERROR: $($chatIdValidation.ErrorMessage)"
     exit 1
 }
-$ChatIdInput = $ChatId
 
 # Convert chat ID to SecureString for processing (PII)
-$ChatIdSecure = ConvertTo-SecureString -String $ChatIdInput -AsPlainText -Force
+$ChatIdSecure = ConvertTo-SecureString -String $ChatId -AsPlainText -Force
 
 # Get or create certificate for encryption
 Write-Host ""
