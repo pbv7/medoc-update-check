@@ -278,7 +278,7 @@ if (-not $BotToken) {
     Write-Host "Format: NUMERIC_ID:ALPHANUMERIC_TOKEN"
     Write-Host "Example: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz1234567890"
     Write-Host ""
-    $BotToken = Read-Host "Bot Token" -AsSecureString | ConvertFrom-SecureString -AsPlainText
+    $BotToken = Read-Host "Bot Token" -AsSecureString | ConvertFrom-SecureString -AsPlainText -Force
 }
 
 # Validate Bot Token
