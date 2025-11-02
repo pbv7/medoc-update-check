@@ -14,12 +14,16 @@
     Creates a scheduled task to run the update check script daily.
     Must be run as Administrator.
 
-.PARAMETER ScriptPath
-    Full path to Run.ps1 (default: current directory)
+.PARAMETER RunScriptPath
+    Full path to the launcher script - the main M.E.Doc Update Check entry point
+    (default: Run.ps1 in project root)
+    Alias: ScriptPath (for backward compatibility with earlier versions)
 
 .PARAMETER ConfigPath
-    Path to configuration file (REQUIRED)
-    Example: ".\configs\Config-MyServer.ps1"
+    Path to server configuration file (REQUIRED)
+    Each server needs its own config file with server-specific settings
+    Can be relative to project root or absolute path
+    Example: ".\configs\Config-MyServer.ps1" or "C:\Scripts\MedocUpdateCheck\configs\Config-MyServer.ps1"
 
 .PARAMETER TaskName
     Task Scheduler task name (default: "M.E.Doc Update Check")
@@ -37,12 +41,13 @@
 
 .NOTES
     Requires Administrator privileges
-    Author: System
-    Version: 1.0
 #>
 
 param(
-    [string]$ScriptPath = (Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Run.ps1'),
+    [Parameter(Mandatory = $false)]
+    [Alias('ScriptPath')]
+    [string]$RunScriptPath = (Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'Run.ps1'),
+
     [string]$ConfigPath,
     [string]$TaskName = "M.E.Doc Update Check",
     [string]$ScheduleTime = "08:00"
@@ -60,7 +65,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 $pwshPath = Get-Command -Name pwsh -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
 if (-not $pwshPath) {
     Write-Error "ERROR: PowerShell 7+ (pwsh) not found on this system"
-    Write-Error "PowerShell 7+ is required. Download from: https://github.com/PowerShell/PowerShell/releases"
+    Write-Error "PowerShell 7+ is required. See: https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell"
     exit 1
 }
 
@@ -71,26 +76,47 @@ Write-Host ([string]::new('=', 50)) -ForegroundColor Gray
 
 # Validate ConfigPath parameter
 if (-not $ConfigPath) {
-    Write-Error "ERROR: ConfigPath parameter is required"
-    Write-Error "Usage: .\Setup-ScheduledTask.ps1 -ConfigPath '.\configs\Config-MyServer.ps1'"
+    Write-Error "ERROR: Server configuration file path is required"
+    Write-Error "Usage (relative): .\Setup-ScheduledTask.ps1 -ConfigPath '.\configs\Config-MyServer.ps1'"
+    Write-Error "Usage (absolute): .\Setup-ScheduledTask.ps1 -ConfigPath 'C:\Scripts\MedocUpdateCheck\configs\Config-MyServer.ps1'"
     exit 1
 }
 
-# Validate script exists
-if (-not (Test-Path $ScriptPath)) {
-    Write-Error "ERROR: Script not found: $ScriptPath"
+# Resolve relative ConfigPath to absolute path for Task Scheduler reliability
+# Relative paths are resolved against the project root to ensure consistency
+# when the scheduled task executes in a different working directory context
+# Use -LiteralPath to treat path literally and avoid wildcard expansion issues
+if (-not [System.IO.Path]::IsPathRooted($ConfigPath)) {
+    $projectRoot = Split-Path -Parent $PSScriptRoot
+    $pathFromRoot = Join-Path -Path $projectRoot -ChildPath $ConfigPath
+    $resolvedPath = Resolve-Path -LiteralPath $pathFromRoot -ErrorAction SilentlyContinue
+    if ($resolvedPath) {
+        $ConfigPath = $resolvedPath.Path
+        Write-Host "✓ Resolved config path to absolute: $ConfigPath"
+    } else {
+        # Fail explicitly to prevent creating a misconfigured scheduled task
+        Write-Error "ERROR: Failed to resolve config file path from project root"
+        Write-Error "Tried: $pathFromRoot"
+        Write-Error "Use an absolute path or provide path relative to project root"
+        exit 1
+    }
+}
+
+# Validate launcher script exists
+if (-not (Test-Path $RunScriptPath)) {
+    Write-Error "ERROR: Launcher script not found at: $RunScriptPath"
     exit 1
 }
 
-Write-Host "✓ Script found: $ScriptPath"
+Write-Host "✓ Launcher script found: $RunScriptPath"
 
-# Validate config exists
+# Validate server configuration file exists
 if (-not (Test-Path $ConfigPath)) {
-    Write-Error "ERROR: Config file not found: $ConfigPath"
+    Write-Error "ERROR: Server configuration file not found: $ConfigPath"
     exit 1
 }
 
-Write-Host "✓ Config found: $ConfigPath"
+Write-Host "✓ Server configuration file found: $ConfigPath"
 
 # Validate time format
 if ($ScheduleTime -notmatch '^\d{2}:\d{2}$') {
@@ -128,10 +154,12 @@ if ($existingTask) {
 }
 
 # Create task action using PowerShell 7+ (pwsh)
-$scriptDirectory = (Get-Item $ScriptPath).DirectoryName
+# -NoProfile: Skip loading user profile for faster execution
+# -ExecutionPolicy Bypass: Allow unsigned local scripts (script is on trusted local system)
+$scriptDirectory = (Get-Item $RunScriptPath).DirectoryName
 $action = New-ScheduledTaskAction `
     -Execute $pwshPath `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`" -ConfigPath `"$ConfigPath`"" `
+    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$RunScriptPath`" -ConfigPath `"$ConfigPath`"" `
     -WorkingDirectory $scriptDirectory
 
 Write-Host "✓ Task action created (using PowerShell 7+)"
@@ -150,6 +178,10 @@ try {
 }
 
 # Create task settings
+# -AllowStartIfOnBatteries: Run even if system is on battery power (important for laptops)
+# -DontStopIfGoingOnBatteries: Don't interrupt if AC power is lost during execution
+# -StartWhenAvailable: Run immediately when system becomes available (if task was missed)
+# -RunOnlyIfNetworkAvailable: Only run when network is connected (M.E.Doc requires network)
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries `
@@ -159,6 +191,9 @@ $settings = New-ScheduledTaskSettingsSet `
 Write-Host "✓ Task settings configured"
 
 # Create principal for SYSTEM user
+# SYSTEM: Runs with system privileges (required for accessing M.E.Doc logs in system directories)
+# ServiceAccount: Special logon type for system service accounts (no user interaction required)
+# RunLevel Highest: Runs with elevated privileges (required for Event Log access)
 $principal = New-ScheduledTaskPrincipal `
     -UserId 'NT AUTHORITY\SYSTEM' `
     -LogonType ServiceAccount `
@@ -193,8 +228,8 @@ Write-Host "Task Details:"
 Write-Host "  Name: $TaskName"
 Write-Host "  Schedule: Daily at $ScheduleTime"
 Write-Host "  Principal: SYSTEM"
-Write-Host "  Script: $ScriptPath"
-Write-Host "  Config: $ConfigPath"
+Write-Host "  Launcher Script: $RunScriptPath"
+Write-Host "  Configuration: $ConfigPath"
 Write-Host ""
 Write-Host "Verify in Task Scheduler:"
 Write-Host "  Task Scheduler Library → Find '$TaskName'"
