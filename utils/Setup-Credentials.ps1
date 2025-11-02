@@ -281,7 +281,8 @@ if (-not $BotToken) {
     $BotTokenSecure = Read-Host "Bot Token" -AsSecureString
 
     # Validate by temporarily converting to plain text
-    $plainTextForValidation = $BotTokenSecure | ConvertFrom-SecureString -AsPlainText
+    # Using System.Net.NetworkCredential for PS 7.0+ compatibility (ConvertFrom-SecureString -AsPlainText requires 7.4+)
+    $plainTextForValidation = [System.Net.NetworkCredential]::new('', $BotTokenSecure).Password
     $botTokenValidation = Test-BotToken -BotToken $plainTextForValidation
     if (-not $botTokenValidation.Valid) {
         Write-Error "ERROR: $($botTokenValidation.ErrorMessage)"
