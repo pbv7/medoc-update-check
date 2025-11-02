@@ -78,6 +78,18 @@ if (-not $ConfigPath) {
     exit 1
 }
 
+# Resolve relative ConfigPath to absolute path for Task Scheduler reliability
+# Relative paths are resolved against the project root to ensure consistency
+# when the scheduled task executes in a different working directory context
+if (-not [System.IO.Path]::IsPathRooted($ConfigPath)) {
+    $projectRoot = Split-Path -Parent $PSScriptRoot
+    $resolvedPath = Resolve-Path -Path (Join-Path -Path $projectRoot -ChildPath $ConfigPath) -ErrorAction SilentlyContinue
+    if ($resolvedPath) {
+        $ConfigPath = $resolvedPath.Path
+        Write-Host "✓ Resolved config path to absolute: $ConfigPath"
+    }
+}
+
 # Validate launcher script exists
 if (-not (Test-Path $RunScriptPath)) {
     Write-Error "ERROR: Launcher script not found at: $RunScriptPath"
