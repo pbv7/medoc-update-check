@@ -76,7 +76,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # Import validation helpers
-$configValidationPath = Join-Path -Path $PSScriptRoot -ChildPath "../lib/ConfigValidation.psm1"
+$configValidationPath = Join-Path -Path (Split-Path -Parent $PSScriptRoot) -ChildPath 'lib/ConfigValidation.psm1'
 Import-Module $configValidationPath -Force
 
 # Verify Administrator
