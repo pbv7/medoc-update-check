@@ -76,7 +76,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # Import validation helpers
-$configValidationPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "..") -ChildPath "lib/ConfigValidation.psm1"
+$configValidationPath = Join-Path -Path $PSScriptRoot -ChildPath "../lib/ConfigValidation.psm1"
 Import-Module $configValidationPath -Force
 
 # Verify Administrator
@@ -278,16 +278,26 @@ if (-not $BotToken) {
     Write-Host "Format: NUMERIC_ID:ALPHANUMERIC_TOKEN"
     Write-Host "Example: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz1234567890"
     Write-Host ""
-    $BotToken = Read-Host "Bot Token" -AsSecureString | ConvertFrom-SecureString -AsPlainText -Force
-}
+    $BotTokenSecure = Read-Host "Bot Token" -AsSecureString
 
-# Validate Bot Token
-$botTokenValidation = Test-BotToken -BotToken $BotToken
-if (-not $botTokenValidation.Valid) {
-    Write-Error "ERROR: $($botTokenValidation.ErrorMessage)"
-    exit 1
+    # Validate by temporarily converting to plain text
+    $plainTextForValidation = $BotTokenSecure | ConvertFrom-SecureString -AsPlainText
+    $botTokenValidation = Test-BotToken -BotToken $plainTextForValidation
+    if (-not $botTokenValidation.Valid) {
+        Write-Error "ERROR: $($botTokenValidation.ErrorMessage)"
+        Clear-Variable plainTextForValidation
+        exit 1
+    }
+    Clear-Variable plainTextForValidation  # Remove plain text from memory
+} else {
+    # Validate Bot Token from parameter
+    $botTokenValidation = Test-BotToken -BotToken $BotToken
+    if (-not $botTokenValidation.Valid) {
+        Write-Error "ERROR: $($botTokenValidation.ErrorMessage)"
+        exit 1
+    }
+    $BotTokenSecure = ConvertTo-SecureString -String $BotToken -AsPlainText -Force
 }
-$BotTokenSecure = ConvertTo-SecureString -String $BotToken -AsPlainText -Force
 
 if (-not $ChatId) {
     Write-Host ""
