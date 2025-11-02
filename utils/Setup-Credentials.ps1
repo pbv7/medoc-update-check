@@ -75,6 +75,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Import validation helpers
+$configValidationPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "..") -ChildPath "lib\ConfigValidation.psm1"
+Import-Module $configValidationPath -Force
+
 # Verify Administrator
 $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = [Security.Principal.WindowsPrincipal]::new($currentUser)
@@ -274,10 +278,16 @@ if (-not $BotToken) {
     Write-Host "Format: NUMERIC_ID:ALPHANUMERIC_TOKEN"
     Write-Host "Example: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz1234567890"
     Write-Host ""
-    $BotTokenSecure = Read-Host "Bot Token" -AsSecureString
-} else {
-    $BotTokenSecure = ConvertTo-SecureString -String $BotToken -AsPlainText -Force
+    $BotToken = Read-Host "Bot Token" -AsSecureString | ConvertFrom-SecureString -AsPlainText
 }
+
+# Validate Bot Token
+$botTokenValidation = Test-BotToken -BotToken $BotToken
+if (-not $botTokenValidation.Valid) {
+    Write-Error "ERROR: $($botTokenValidation.ErrorMessage)"
+    exit 1
+}
+$BotTokenSecure = ConvertTo-SecureString -String $BotToken -AsPlainText -Force
 
 if (-not $ChatId) {
     Write-Host ""
@@ -285,16 +295,16 @@ if (-not $ChatId) {
     Write-Host "For private chat: positive number (e.g., 123456789)"
     Write-Host "For channel: negative number (e.g., -1002825825746)"
     Write-Host ""
-    $ChatIdInput = Read-Host "Chat ID"
-} else {
-    $ChatIdInput = $ChatId
+    $ChatId = Read-Host "Chat ID"
 }
 
-# Validate chat ID (should be numeric, positive or negative)
-if ($ChatIdInput -notmatch '^-?\d+$') {
-    Write-Error "ERROR: Invalid chat ID format. Expected: numeric (positive or negative)"
+# Validate Chat ID
+$chatIdValidation = Test-ChatId -ChatId $ChatId
+if (-not $chatIdValidation.Valid) {
+    Write-Error "ERROR: $($chatIdValidation.ErrorMessage)"
     exit 1
 }
+$ChatIdInput = $ChatId
 
 # Convert chat ID to SecureString for processing (PII)
 $ChatIdSecure = ConvertTo-SecureString -String $ChatIdInput -AsPlainText -Force
