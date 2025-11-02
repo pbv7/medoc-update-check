@@ -282,14 +282,16 @@ if (-not $BotToken) {
 
     # Validate by temporarily converting to plain text
     # Using System.Net.NetworkCredential for PS 7.0+ compatibility (ConvertFrom-SecureString -AsPlainText requires 7.4+)
-    $plainTextForValidation = [System.Net.NetworkCredential]::new('', $BotTokenSecure).Password
-    $botTokenValidation = Test-BotToken -BotToken $plainTextForValidation
-    if (-not $botTokenValidation.Valid) {
-        Write-Error "ERROR: $($botTokenValidation.ErrorMessage)"
-        Clear-Variable plainTextForValidation
-        exit 1
+    try {
+        $plainTextForValidation = [System.Net.NetworkCredential]::new('', $BotTokenSecure).Password
+        $botTokenValidation = Test-BotToken -BotToken $plainTextForValidation
+        if (-not $botTokenValidation.Valid) {
+            Write-Error "ERROR: $($botTokenValidation.ErrorMessage)"
+            exit 1
+        }
+    } finally {
+        Clear-Variable plainTextForValidation -ErrorAction SilentlyContinue  # Remove plain text from memory
     }
-    Clear-Variable plainTextForValidation  # Remove plain text from memory
 } else {
     # Validate Bot Token from parameter
     $botTokenValidation = Test-BotToken -BotToken $BotToken
