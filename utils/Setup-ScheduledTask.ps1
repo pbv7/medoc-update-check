@@ -85,10 +85,11 @@ if (-not $ConfigPath) {
 # Resolve relative ConfigPath to absolute path for Task Scheduler reliability
 # Relative paths are resolved against the project root to ensure consistency
 # when the scheduled task executes in a different working directory context
+# Use -LiteralPath to treat path literally and avoid wildcard expansion issues
 if (-not [System.IO.Path]::IsPathRooted($ConfigPath)) {
     $projectRoot = Split-Path -Parent $PSScriptRoot
     $pathFromRoot = Join-Path -Path $projectRoot -ChildPath $ConfigPath
-    $resolvedPath = Resolve-Path -Path $pathFromRoot -ErrorAction SilentlyContinue
+    $resolvedPath = Resolve-Path -LiteralPath $pathFromRoot -ErrorAction SilentlyContinue
     if ($resolvedPath) {
         $ConfigPath = $resolvedPath.Path
         Write-Host "✓ Resolved config path to absolute: $ConfigPath"
