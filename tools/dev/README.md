@@ -252,10 +252,10 @@ Use standard PowerShell regex:
 | `+` | One or more | `ERROR+` |
 | `*` | Zero or more | `ERROR*` |
 | `?` | Optional | `ERROR?` |
-| `\|` | OR | `ERROR|FAIL` |
+| `\|` | OR operator | `ERROR\|FAIL` or `(ERROR\|FAIL)` |
 | `^` | Line start | `^ERROR` |
 | `$` | Line end | `ERROR$` |
-| `()` | Group | `(ERROR|FAIL)` |
+| `()` | Group | `(ERROR\|FAIL)` |
 | `{n,m}` | Repeat | `\d{1,3}` |
 
 ### Testing Patterns

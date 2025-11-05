@@ -167,6 +167,58 @@ if (-not ([System.Text.Encoding]::Encodings.Any({ $_.Name -eq "windows-1251" }))
 # Windows-1251 encoding for M.E.Doc compatibility
 $encoding = [System.Text.Encoding]::GetEncoding(1251)
 
+# Helper function to apply pattern to a single file and return statistics
+function Apply-PatternToFile {
+    param(
+        [System.IO.FileInfo]$File,
+        [string]$Pattern,
+        [string]$ExcludedDir,
+        [System.Text.Encoding]$Encoding
+    )
+
+    $tempFile = New-TemporaryFile
+    $excludedPath = Join-Path $ExcludedDir $File.Name
+    $linesKeptInFile = 0
+    $linesExcludedInFile = 0
+
+    try {
+        # Use StreamWriter for efficient buffered I/O
+        $writerKept = [System.IO.StreamWriter]::new($tempFile.FullName, $false, $Encoding)
+        $writerExcluded = [System.IO.StreamWriter]::new($excludedPath, $true, $Encoding)
+
+        try {
+            # Stream-process file line-by-line without loading entire file into memory
+            foreach ($line in [System.IO.File]::ReadLines($File.FullName, $Encoding)) {
+                if ($line -match $Pattern) {
+                    $writerExcluded.WriteLine($line)
+                    $linesExcludedInFile++
+                } else {
+                    $writerKept.WriteLine($line)
+                    $linesKeptInFile++
+                }
+            }
+        }
+        finally {
+            $writerKept.Dispose()
+            $writerExcluded.Dispose()
+        }
+
+        # Replace original file with filtered version
+        Move-Item -Path $tempFile.FullName -Destination $File.FullName -Force
+    }
+    finally {
+        # Ensure temporary file is cleaned up
+        if (Test-Path $tempFile.FullName) {
+            Remove-Item $tempFile.FullName -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    return @{
+        KeptCount = $linesKeptInFile
+        ExcludedCount = $linesExcludedInFile
+    }
+}
+
 # Validate regex pattern syntax
 try {
     [regex]::new($Pattern) | Out-Null
@@ -201,50 +253,23 @@ Write-Host "Processing with pattern: $Pattern" -ForegroundColor Cyan
 Write-Host ""
 
 $files = Get-ChildItem $CleanedDir -Filter "update_*.log"
+
+if ($files.Count -eq 0) {
+    Write-Warning "No update_*.log files found in $CleanedDir. Pattern saved but could not be tested."
+    $Pattern | Out-File $PatternsFile -Encoding utf8 -Append
+    Write-Host ""
+    Write-Host "✅ Pattern saved to: $PatternsFile" -ForegroundColor Green
+    Write-Host "Run the script again after adding log files to test the pattern." -ForegroundColor Cyan
+    return
+}
+
 $totalKept = 0
 $totalExcluded = 0
 
 foreach ($file in $files) {
-    # Use temporary file for filtered content
-    $tempFile = New-TemporaryFile
-    $excludedPath = Join-Path $ExcludedDir $file.Name
-    $linesKeptInFile = 0
-    $linesExcludedInFile = 0
-
-    try {
-        # Use StreamWriter for efficient buffered I/O instead of Add-Content (one open/close per line)
-        $writerKept = [System.IO.StreamWriter]::new($tempFile.FullName, $false, $encoding)
-        $writerExcluded = [System.IO.StreamWriter]::new($excludedPath, $true, $encoding)
-
-        try {
-            # Stream-process file line-by-line without loading entire file into memory
-            foreach ($line in [System.IO.File]::ReadLines($file.FullName, $encoding)) {
-                if ($line -match $Pattern) {
-                    $writerExcluded.WriteLine($line)
-                    $linesExcludedInFile++
-                } else {
-                    $writerKept.WriteLine($line)
-                    $linesKeptInFile++
-                }
-            }
-        }
-        finally {
-            $writerKept.Dispose()
-            $writerExcluded.Dispose()
-        }
-
-        # Replace original file with filtered version
-        Move-Item -Path $tempFile.FullName -Destination $file.FullName -Force
-    }
-    finally {
-        # Ensure temporary file is cleaned up
-        if (Test-Path $tempFile.FullName) {
-            Remove-Item $tempFile.FullName -Force -ErrorAction SilentlyContinue
-        }
-    }
-
-    $totalKept += $linesKeptInFile
-    $totalExcluded += $linesExcludedInFile
+    $result = Apply-PatternToFile -File $file -Pattern $Pattern -ExcludedDir $ExcludedDir -Encoding $encoding
+    $totalKept += $result.KeptCount
+    $totalExcluded += $result.ExcludedCount
 }
 
 # Append pattern to file
