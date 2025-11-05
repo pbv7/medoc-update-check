@@ -31,7 +31,7 @@ This:
 
 ### 2. Batch Apply All Patterns
 
-Apply all patterns from the library at once:
+Apply all patterns from the library at once (optimized single-pass processing):
 
 ```powershell
 ./Invoke-LogFiltering.ps1
@@ -40,8 +40,9 @@ Apply all patterns from the library at once:
 This:
 
 - Copies source logs to cleaned directory
-- Applies each pattern sequentially
-- Reports lines kept/excluded per pattern
+- Combines all patterns into single regex for efficient processing
+- Processes each file once with all patterns applied
+- Reports total lines kept/excluded
 - Produces final cleaned logs
 
 ## Directory Structure
@@ -154,7 +155,7 @@ Copied 5 file(s)
 
 ### Add-LogFilterPattern.ps1
 
-Add a single pattern interactively and apply it to logs.
+Add a single pattern interactively and apply it to logs. Displays a preview of excluded lines to help review what will be removed.
 
 **Usage:**
 
@@ -171,15 +172,19 @@ Add a single pattern interactively and apply it to logs.
 | CleanedDir | logs/cleaned | Directory for in-place filtering. Populated from `SourceDir` on first run. |
 | ExcludedDir | logs/excluded | Excluded lines archive |
 | PatternsFile | patterns/cleanup-patterns.txt | Pattern library |
+| SkipStats | $false | Skip per-pattern statistics and use single-pass processing for speed (useful with many patterns or very large logs) |
 
 **Example:**
 
 ```powershell
 ./Add-LogFilterPattern.ps1 -Pattern "Розпаковано файл:"
-# Remove unpacking messages
+# Remove unpacking messages (shows detailed statistics)
 
 ./Add-LogFilterPattern.ps1 -Pattern "INFO\s+[A-Za-z0-9]"
 # Remove info lines with alphanumeric
+
+./Add-LogFilterPattern.ps1 -Pattern "new pattern" -SkipStats
+# Add pattern and use fast single-pass processing
 
 ./Add-LogFilterPattern.ps1 -Pattern "[0-9a-f]{8}-[0-9a-f]{4}"
 # Remove UUID patterns
@@ -187,12 +192,40 @@ Add a single pattern interactively and apply it to logs.
 
 **Output:**
 
+In default mode (with detailed statistics):
+
 ```text
 Processing with pattern: INFO\s+Створення копії файлу:
 
 Processed 5 files
+Applied 1 pattern with detailed statistics
 Total lines kept: 45230
 Total lines excluded: 2100
+
+Preview of excluded lines (first 5 shown):
+────────────────────────────────────────────────────────────────────────────────
+INFO     Створення копії файлу: C:\path\to\file1.txt
+INFO     Створення копії файлу: C:\path\to\file2.exe
+INFO     Створення копії файлу: C:\MEDOCSRV\DATA\update.xml
+INFO     Створення копії файлу: D:\backup\archive.zip
+INFO     Створення копії файлу: C:\logs\system.log
+... and 2095 more lines
+────────────────────────────────────────────────────────────────────────────────
+
+Pattern saved to: patterns/cleanup-patterns.txt
+
+✅ Pattern added successfully!
+```
+
+With `-SkipStats` flag (single-pass, no preview):
+
+```text
+Processing with pattern: INFO\s+Створення копії файлу:
+
+Processed 5 files
+Applied 3 patterns in single pass
+Total lines kept: 42100
+Total lines excluded: 5230
 Pattern saved to: patterns/cleanup-patterns.txt
 
 ✅ Pattern added successfully!
@@ -252,10 +285,10 @@ Use standard PowerShell regex:
 | `+` | One or more | `ERROR+` |
 | `*` | Zero or more | `ERROR*` |
 | `?` | Optional | `ERROR?` |
-| `\|` | OR | `ERROR|FAIL` |
+| `\|` | OR operator | `ERROR\|FAIL` or `(ERROR\|FAIL)` |
 | `^` | Line start | `^ERROR` |
 | `$` | Line end | `ERROR$` |
-| `()` | Group | `(ERROR|FAIL)` |
+| `()` | Group | `(ERROR\|FAIL)` |
 | `{n,m}` | Repeat | `\d{1,3}` |
 
 ### Testing Patterns
@@ -288,23 +321,40 @@ ensure your editor is configured to save the file as UTF-8. Use the
 
 ## Performance Notes
 
-Processing speed depends on:
+### Invoke-LogFiltering.ps1 (Batch Tool)
+
+Uses optimized **single-pass processing** by combining all patterns into a single regex:
+
+- Each file is read and written only once, regardless of pattern count
+- Significantly faster than sequential pattern application
+- No per-pattern statistics (not needed for batch processing)
+
+### Add-LogFilterPattern.ps1 (Interactive Tool)
+
+**Default:** Shows detailed per-pattern statistics (developer-friendly)
+
+- Useful for understanding pattern impact during development
+
+**With `-SkipStats` flag:** Uses single-pass processing for faster testing
+
+- Combines all patterns into single regex
+- Useful when working with many accumulated patterns
+- Useful for very large log files
+
+### Performance factors
 
 - Number of log files
 - Size of each log file (in MB)
 - Number of patterns
 - Complexity of regex patterns
 
-**Typical performance:**
+### Optimization tips
 
-- 100 MB logs with 20 patterns: 30-60 seconds
-- 500 MB logs with 20 patterns: 2-3 minutes
-
-If processing is slow:
-
-1. **Reduce file size** - Move older logs to separate directory
-2. **Simplify patterns** - Use more specific regex (fewer false matches)
-3. **Reduce patterns** - Comment out unused patterns with `#`
+1. **Use Invoke-LogFiltering.ps1 for batch processing** - Optimized single-pass design
+2. **Use -SkipStats in Add-LogFilterPattern.ps1 with many patterns** - For faster development cycles
+3. **Reduce file size** - Move older logs to separate directory
+4. **Simplify patterns** - Use more specific regex (fewer false matches)
+5. **Reduce patterns** - Comment out unused patterns with `#`
 
 ## Troubleshooting
 
