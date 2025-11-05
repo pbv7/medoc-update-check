@@ -167,7 +167,8 @@ param(
 
 # Register Windows code pages for cross-platform PowerShell 7 support
 # On non-Windows systems, explicitly load the encoding provider
-if (-not ([System.Text.Encoding]::Encodings.Any({ $_.Name -eq "windows-1251" }))) {
+$encodingExists = [System.Text.Encoding]::GetEncodings() | Where-Object { $_.Name -eq "windows-1251" }
+if (-not $encodingExists) {
     [System.Text.Encoding]::RegisterProvider([System.Text.CodePagesEncodingProvider]::Instance)
 }
 
@@ -214,15 +215,15 @@ $files = Get-ChildItem $CleanedDir -Filter "update_*.log"
 
 if ($files.Count -eq 0) {
     Write-Warning "No update_*.log files found in $CleanedDir. Pattern saved but could not be tested."
-    $Pattern | Out-File $PatternsFile -Encoding utf8 -Append
+    Add-Content -Path $PatternsFile -Value $Pattern -Encoding utf8
     Write-Host ""
     Write-Host "✅ Pattern saved to: $PatternsFile" -ForegroundColor Green
     Write-Host "Run the script again after adding log files to test the pattern." -ForegroundColor Cyan
     return
 }
 
-# Append new pattern to file first
-$Pattern | Out-File $PatternsFile -Encoding utf8 -Append
+# Append new pattern to file first (using Add-Content for robustness with edited files)
+Add-Content -Path $PatternsFile -Value $Pattern -Encoding utf8
 
 # Determine which pattern(s) to apply
 if ($SkipStats) {

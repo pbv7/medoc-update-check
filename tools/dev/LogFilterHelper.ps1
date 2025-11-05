@@ -19,7 +19,8 @@ ENCODING CRITICAL:
 
 # Register Windows code pages for cross-platform PowerShell 7 support
 # On non-Windows systems, explicitly load the encoding provider
-if (-not ([System.Text.Encoding]::Encodings.Any({ $_.Name -eq "windows-1251" }))) {
+$encodingExists = [System.Text.Encoding]::GetEncodings() | Where-Object { $_.Name -eq "windows-1251" }
+if (-not $encodingExists) {
     [System.Text.Encoding]::RegisterProvider([System.Text.CodePagesEncodingProvider]::Instance)
 }
 
