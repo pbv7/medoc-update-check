@@ -261,7 +261,7 @@ $allExcludedLines = @()
 $capturePreview = -not $isSkippingStats
 
 foreach ($file in $files) {
-    $result = Apply-PatternToFile -File $file -Pattern $patternToUse -ExcludedDir $ExcludedDir -Encoding $encoding -CapturePreview:$capturePreview
+    $result = Invoke-PatternFilter -File $file -Pattern $patternToUse -ExcludedDir $ExcludedDir -Encoding $encoding -CapturePreview:$capturePreview
     $totalKept += $result.KeptCount
     $totalExcluded += $result.ExcludedCount
     if ($capturePreview) {

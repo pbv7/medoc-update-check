@@ -209,7 +209,7 @@ $totalExcluded = 0
 
 foreach ($file in $files) {
     # Use combined pattern to filter in a single pass
-    $result = Apply-PatternToFile -File $file -Pattern $combinedPattern -ExcludedDir $ExcludedDir -Encoding $encoding
+    $result = Invoke-PatternFilter -File $file -Pattern $combinedPattern -ExcludedDir $ExcludedDir -Encoding $encoding
     $totalKept += $result.KeptCount
     $totalExcluded += $result.ExcludedCount
 }

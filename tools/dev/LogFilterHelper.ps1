@@ -26,7 +26,7 @@ if (-not $encodingExists) {
 
 <#
 .SYNOPSIS
-Apply a regex pattern to a single file and return filtering statistics.
+Invoke filtering on a log file by regex pattern and return statistics.
 
 .DESCRIPTION
 Processes a single log file, filtering out lines matching the provided pattern.
@@ -44,15 +44,23 @@ Directory where excluded lines are archived.
 .PARAMETER Encoding
 System.Text.Encoding object for file I/O (should be Windows-1251 for M.E.Doc logs).
 
+.PARAMETER CapturePreview
+Switch to capture first 5 excluded lines for preview display (useful for interactive mode).
+
 .OUTPUTS
-Hashtable with KeptCount and ExcludedCount properties.
+Hashtable with KeptCount, ExcludedCount, and ExcludedLines properties.
 
 .EXAMPLE
-$result = Apply-PatternToFile -File $file -Pattern "INFO\s+Створення" -ExcludedDir "logs/excluded" -Encoding $encoding
+$result = Invoke-PatternFilter -File $file -Pattern "INFO\s+Створення" -ExcludedDir "logs/excluded" -Encoding $encoding
 Write-Host "Kept: $($result.KeptCount), Excluded: $($result.ExcludedCount)"
 
+.EXAMPLE
+# Capture preview of excluded lines for interactive review
+$result = Invoke-PatternFilter -File $file -Pattern "INFO\s+Створення" -ExcludedDir "logs/excluded" -Encoding $encoding -CapturePreview
+$result.ExcludedLines | ForEach-Object { Write-Host $_ -ForegroundColor Gray }
+
 #>
-function Apply-PatternToFile {
+function Invoke-PatternFilter {
     param(
         [System.IO.FileInfo]$File,
         [string]$Pattern,
@@ -111,4 +119,4 @@ function Apply-PatternToFile {
 }
 
 # Export function for use by dot-sourcing scripts
-Export-ModuleFunction -Function Apply-PatternToFile -ErrorAction SilentlyContinue
+Export-ModuleFunction -Function Invoke-PatternFilter -ErrorAction SilentlyContinue
