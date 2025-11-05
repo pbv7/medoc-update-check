@@ -149,13 +149,25 @@ if (-not (Test-Path $PatternsFile)) {
 }
 
 # Read all patterns (skip empty lines and comments)
-$patterns = @(Get-Content $PatternsFile -Encoding utf8 | Where-Object {
+$rawPatterns = @(Get-Content $PatternsFile -Encoding utf8 | Where-Object {
     $_ -and -not $_.StartsWith('#')
 })
 
+# Validate patterns and filter out invalid ones
+$patterns = @()
+foreach ($p in $rawPatterns) {
+    try {
+        [regex]::new($p) | Out-Null
+        $patterns += $p
+    }
+    catch {
+        Write-Warning "Skipping invalid regex pattern from '$PatternsFile': `"$p`". Error: $($_.Exception.Message)"
+    }
+}
+
 if ($patterns.Count -eq 0) {
-    Write-Warning "No patterns found in $PatternsFile (empty file or all comments)"
-    exit 0
+    Write-Warning "No valid patterns found in $PatternsFile to apply."
+    return
 }
 
 Write-Host "Found $($patterns.Count) patterns to apply" -ForegroundColor Cyan
@@ -171,7 +183,7 @@ $sourceFiles = @(Get-ChildItem $SourceDir -Filter "update_*.log")
 
 if ($sourceFiles.Count -eq 0) {
     Write-Warning "No update_*.log files found in $SourceDir"
-    exit 0
+    return
 }
 
 $sourceFiles | ForEach-Object {

@@ -168,7 +168,7 @@ Add a single pattern interactively and apply it to logs.
 |-----------|---------|-------------|
 | Pattern | (required) | Regex pattern to apply |
 | SourceDir | logs/source | Original logs |
-| CleanedDir | logs/cleaned | Working cleaned logs |
+| CleanedDir | logs/cleaned | Directory for in-place filtering. Populated from `SourceDir` on first run. |
 | ExcludedDir | logs/excluded | Excluded lines archive |
 | PatternsFile | patterns/cleanup-patterns.txt | Pattern library |
 

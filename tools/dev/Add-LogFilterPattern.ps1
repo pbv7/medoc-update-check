@@ -167,6 +167,14 @@ if (-not ([System.Text.Encoding]::Encodings.Any({ $_.Name -eq "windows-1251" }))
 # Windows-1251 encoding for M.E.Doc compatibility
 $encoding = [System.Text.Encoding]::GetEncoding(1251)
 
+# Validate regex pattern syntax
+try {
+    [regex]::new($Pattern) | Out-Null
+}
+catch {
+    Write-Error "The provided regex pattern '$Pattern' is invalid. Please check the syntax. Error: $($_.Exception.Message)" -ErrorAction Stop
+}
+
 # Validate inputs
 if (-not (Test-Path $SourceDir)) {
     Write-Error "Source directory not found: $SourceDir" -ErrorAction Stop
