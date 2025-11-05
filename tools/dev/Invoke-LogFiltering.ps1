@@ -2,7 +2,7 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-Apply all patterns from cleanup-patterns.txt to M.E.Doc log files sequentially.
+Apply all patterns from cleanup-patterns.txt to M.E.Doc log files in a single efficient pass.
 
 .DESCRIPTION
 This utility applies a series of regex patterns stored in cleanup-patterns.txt
@@ -22,11 +22,11 @@ This is especially useful for:
 
 WORKFLOW:
 1. Copy source logs to output directory
-2. For each pattern in cleanup-patterns.txt:
-   a. Read all lines from cleaned log files
-   b. Lines matching pattern → moved to excluded archive
-   c. Lines not matching pattern → kept in cleaned log
-3. Display summary of lines kept/excluded per pattern
+2. Combine all patterns into a single regex using OR operator
+3. Process each log file once, applying all patterns in a single pass
+4. Lines matching any pattern → moved to excluded archive
+5. Lines not matching any pattern → kept in cleaned log
+6. Display summary of total lines kept/excluded
 
 .PARAMETER SourceDir
 Directory containing original M.E.Doc update logs (update_*.log format).
@@ -109,13 +109,13 @@ ERROR HANDLING:
 - Check regex syntax before running on large logs
 
 PERFORMANCE NOTES:
+- Single-pass processing: Each file is read and written only once
 - Processing speed depends on:
   a) Number of log files
   b) Size of each log file
-  c) Number of patterns
-  d) Complexity of regex patterns
-- Typical: 100MB logs with 20 patterns = 30-60 seconds
-- Progress shown for each pattern applied
+  c) Complexity of combined regex patterns
+- Very fast compared to sequential pattern application
+- All patterns applied to each line in a single regex match
 
 SEE ALSO:
 - Add-LogFilterPattern.ps1 - Interactive tool to add patterns
@@ -196,26 +196,30 @@ Write-Host "Copied $($sourceFiles.Count) file(s)" -ForegroundColor Green
 
 Write-Host ""
 
-# Apply each pattern sequentially using streaming for memory efficiency
-$patternNum = 1
-foreach ($pattern in $patterns) {
-    Write-Host "[$patternNum/$($patterns.Count)] Applying: $pattern" -ForegroundColor Green
+# Combine all patterns into a single regex using OR operator for single-pass processing
+# This is more efficient than sequential pattern application (eliminates P*F I/O operations)
+$combinedPattern = $patterns -join '|'
 
-    $files = Get-ChildItem $OutputDir -Filter "update_*.log"
-    $totalKept = 0
-    $totalExcluded = 0
+Write-Host "Applying all patterns in a single pass for maximum efficiency..." -ForegroundColor Yellow
+Write-Host ""
 
-    foreach ($file in $files) {
-        $result = Apply-PatternToFile -File $file -Pattern $pattern -ExcludedDir $ExcludedDir -Encoding $encoding
-        $totalKept += $result.KeptCount
-        $totalExcluded += $result.ExcludedCount
-    }
+$files = Get-ChildItem $OutputDir -Filter "update_*.log"
+$totalKept = 0
+$totalExcluded = 0
 
-    Write-Host "  Lines kept: $totalKept, excluded: $totalExcluded" -ForegroundColor DarkGray
-    $patternNum++
+foreach ($file in $files) {
+    # Use combined pattern to filter in a single pass
+    $result = Apply-PatternToFile -File $file -Pattern $combinedPattern -ExcludedDir $ExcludedDir -Encoding $encoding
+    $totalKept += $result.KeptCount
+    $totalExcluded += $result.ExcludedCount
 }
 
 Write-Host ""
-Write-Host "✅ Done! All patterns applied." -ForegroundColor Green
+Write-Host "Processing Summary:" -ForegroundColor Cyan
+Write-Host "  Total lines kept: $totalKept" -ForegroundColor Green
+Write-Host "  Total lines excluded: $totalExcluded" -ForegroundColor Green
+
+Write-Host ""
+Write-Host "✅ Done! All patterns applied in single pass." -ForegroundColor Green
 Write-Host "  Cleaned logs: $OutputDir" -ForegroundColor Cyan
 Write-Host "  Excluded lines: $ExcludedDir" -ForegroundColor Cyan

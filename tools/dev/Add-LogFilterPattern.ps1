@@ -46,13 +46,19 @@ Default: "logs/excluded" (relative to script directory)
 File where patterns are accumulated (one per line).
 Default: "patterns/cleanup-patterns.txt" (relative to script directory)
 
-.EXAMPLE
-.\Add-LogFilterPattern.ps1 -Pattern "INFO\s+Створення копії файлу:"
-# Add pattern to remove "INFO Creating copy file:" messages
+.PARAMETER SkipStats
+Switch to skip per-pattern statistics and apply all patterns in a single pass.
+Default: $false (show statistics for each pattern)
+When enabled, combines all patterns with OR operator for faster processing.
+Use this when working with many patterns or very large log files.
 
 .EXAMPLE
-.\Add-LogFilterPattern.ps1 -Pattern "MEDOCSRV\\TEMP\\[0-9a-f]{8}"
-# Add pattern to remove temporary file paths
+.\Add-LogFilterPattern.ps1 -Pattern "INFO\s+Створення копії файлу:"
+# Add pattern and show detailed statistics for this pattern
+
+.EXAMPLE
+.\Add-LogFilterPattern.ps1 -Pattern "MEDOCSRV\\TEMP\\[0-9a-f]{8}" -SkipStats
+# Add pattern and skip statistics for faster processing
 
 .EXAMPLE
 .\Add-LogFilterPattern.ps1 -Pattern "[^\s]+\\[^\s]+\.[a-zA-Z0-9]+$"
@@ -155,7 +161,8 @@ param(
     [string]$SourceDir = (Join-Path $PSScriptRoot "logs/source"),
     [string]$CleanedDir = (Join-Path $PSScriptRoot "logs/cleaned"),
     [string]$ExcludedDir = (Join-Path $PSScriptRoot "logs/excluded"),
-    [string]$PatternsFile = (Join-Path $PSScriptRoot "patterns/cleanup-patterns.txt")
+    [string]$PatternsFile = (Join-Path $PSScriptRoot "patterns/cleanup-patterns.txt"),
+    [switch]$SkipStats
 )
 
 # Register Windows code pages for cross-platform PowerShell 7 support
@@ -214,19 +221,54 @@ if ($files.Count -eq 0) {
     return
 }
 
+# Append new pattern to file first
+$Pattern | Out-File $PatternsFile -Encoding utf8 -Append
+
+# Determine which pattern(s) to apply
+if ($SkipStats) {
+    # Combine all patterns (including the new one) for single-pass processing
+    $rawPatterns = @(Get-Content $PatternsFile -Encoding utf8 | Where-Object {
+        $_ -and -not $_.StartsWith('#')
+    })
+
+    # Validate and combine patterns
+    $validPatterns = @()
+    foreach ($p in $rawPatterns) {
+        try {
+            [regex]::new($p) | Out-Null
+            $validPatterns += $p
+        }
+        catch {
+            # Skip invalid patterns silently in skip-stats mode
+        }
+    }
+
+    $combinedPattern = $validPatterns -join '|'
+    $patternToUse = $combinedPattern
+    $isSkippingStats = $true
+} else {
+    # Apply only the new pattern for detailed statistics
+    $patternToUse = $Pattern
+    $isSkippingStats = $false
+}
+
 $totalKept = 0
 $totalExcluded = 0
 
 foreach ($file in $files) {
-    $result = Apply-PatternToFile -File $file -Pattern $Pattern -ExcludedDir $ExcludedDir -Encoding $encoding
+    $result = Apply-PatternToFile -File $file -Pattern $patternToUse -ExcludedDir $ExcludedDir -Encoding $encoding
     $totalKept += $result.KeptCount
     $totalExcluded += $result.ExcludedCount
 }
 
-# Append pattern to file
-$Pattern | Out-File $PatternsFile -Encoding utf8 -Append
-
 Write-Host "Processed $($files.Count) files" -ForegroundColor Green
+
+if ($isSkippingStats) {
+    Write-Host "Applied $($validPatterns.Count) patterns in single pass" -ForegroundColor Cyan
+} else {
+    Write-Host "Applied 1 pattern with detailed statistics" -ForegroundColor Cyan
+}
+
 Write-Host "Total lines kept: $totalKept" -ForegroundColor Green
 Write-Host "Total lines excluded: $totalExcluded" -ForegroundColor Green
 Write-Host "Pattern saved to: $PatternsFile" -ForegroundColor Cyan
