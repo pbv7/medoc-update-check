@@ -214,7 +214,7 @@ Write-Host ""
 $files = Get-ChildItem $CleanedDir -Filter "update_*.log"
 
 if ($files.Count -eq 0) {
-    Write-Warning "No update_*.log files found in $CleanedDir. Pattern saved but could not be tested."
+    Write-Warning "No 'update_*.log' files found in '$CleanedDir' to process. The pattern will be saved without being tested."
     Add-Content -Path $PatternsFile -Value $Pattern -Encoding utf8
     Write-Host ""
     Write-Host "✅ Pattern saved to: $PatternsFile" -ForegroundColor Green
