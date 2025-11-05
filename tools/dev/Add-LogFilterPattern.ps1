@@ -156,6 +156,7 @@ SEE ALSO:
 #>
 param(
     [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
     [string]$Pattern,
 
     [string]$SourceDir = (Join-Path $PSScriptRoot "logs/source"),
