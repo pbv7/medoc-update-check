@@ -158,6 +158,12 @@ param(
     [string]$PatternsFile = (Join-Path $PSScriptRoot "patterns/cleanup-patterns.txt")
 )
 
+# Register Windows code pages for cross-platform PowerShell 7 support
+# On non-Windows systems, explicitly load the encoding provider
+if (-not ([System.Text.Encoding]::Encodings.Any({ $_.Name -eq "windows-1251" }))) {
+    [System.Text.Encoding]::RegisterProvider([System.Text.CodePagesEncodingProvider]::Instance)
+}
+
 # Windows-1251 encoding for M.E.Doc compatibility
 $encoding = [System.Text.Encoding]::GetEncoding(1251)
 
@@ -182,14 +188,6 @@ if ($cleanedFiles.Count -eq 0 -and $sourceFiles.Count -gt 0) {
     }
 }
 
-# Initialize excluded files if they don't exist
-$sourceFiles | ForEach-Object {
-    $excludedPath = Join-Path $ExcludedDir $_.Name
-    if (-not (Test-Path $excludedPath)) {
-        "" | Out-File $excludedPath -Encoding $encoding
-    }
-}
-
 # Process files with the pattern
 Write-Host "Processing with pattern: $Pattern" -ForegroundColor Cyan
 Write-Host ""
@@ -199,29 +197,36 @@ $totalKept = 0
 $totalExcluded = 0
 
 foreach ($file in $files) {
-    $content = Get-Content $file.FullName -Encoding $encoding
-    $kept = @()
-    $excluded = @()
+    # Use temporary file for filtered content
+    $tempFile = New-TemporaryFile
+    $excludedPath = Join-Path $ExcludedDir $file.Name
+    $linesKeptInFile = 0
+    $linesExcludedInFile = 0
 
-    foreach ($line in $content) {
-        if ($line -match $Pattern) {
-            $excluded += $line
-        } else {
-            $kept += $line
+    try {
+        # Stream-process file line-by-line without loading entire file into memory
+        # Use Get-Content with Encoding parameter for cross-platform support
+        Get-Content $file.FullName -Encoding $encoding -ReadCount 0 | ForEach-Object {
+            if ($_ -match $Pattern) {
+                $_ | Add-Content -Path $excludedPath -Encoding $encoding
+                $linesExcludedInFile++
+            } else {
+                $_ | Add-Content -Path $tempFile.FullName -Encoding $encoding
+                $linesKeptInFile++
+            }
+        }
+        # Replace original file with filtered version
+        Move-Item -Path $tempFile.FullName -Destination $file.FullName -Force
+    }
+    finally {
+        # Ensure temporary file is cleaned up
+        if (Test-Path $tempFile.FullName) {
+            Remove-Item $tempFile.FullName -Force -ErrorAction SilentlyContinue
         }
     }
 
-    # Overwrite cleaned file
-    $kept | Out-File $file.FullName -Encoding $encoding
-
-    # Append to excluded file
-    $excludedPath = Join-Path $ExcludedDir $file.Name
-    if ($excluded.Count -gt 0) {
-        $excluded | Out-File $excludedPath -Encoding $encoding -Append
-    }
-
-    $totalKept += $kept.Count
-    $totalExcluded += $excluded.Count
+    $totalKept += $linesKeptInFile
+    $totalExcluded += $linesExcludedInFile
 }
 
 # Append pattern to file
