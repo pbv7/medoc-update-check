@@ -7,6 +7,9 @@ last_run_*.txt
 *.log
 Planner.log
 
+# Developer tool working directories (M.E.Doc log analysis - external analysis only)
+tools/dev/logs/
+
 # Windows/PowerShell temporary files
 *.ps1xml
 *.pssc
@@ -40,6 +43,9 @@ obj/
 .env
 .env.local
 *.env
+
+# Kubernetes configuration and credentials
+.kube/
 
 # Test runtime artifacts (checkpoint files generated during test execution)
 tests/test-data/**/checkpoint-*.txt
