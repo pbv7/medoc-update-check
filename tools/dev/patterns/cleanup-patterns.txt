@@ -1,0 +1,19 @@
+Розпаковано файл:
+Спроба розпаковки вихідного файла
+MEDOCSRV\\TEMP\\[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
+INFO\s+Створення копії файлу:
+INFO\s+Копія файлу .+ не створюється
+INFO\s+Оновлення файлу:
+INFO\s+файл:
+INFO\s+Файл [A-Z0-9]
+INFO\s+Файл не перевіряється - виключено з переліку
+INFO\s+Вдало, контрольні суми співпадають
+INFO\s+.+DirectoryOrFile : '[A-Z]:\\
+INFO\s+.+File NOT found: '[A-Z]:\\
+INFO\s+.+IsNullOrEmpty\(appData\): 'True'
+INFO\s+.+File (found|deleted): '[A-Z]:\\
+INFO\s+([^\s]+\\)*[^\s]+\.[a-zA-Z0-9]+$
+INFO\s+(Оновлення|Створення) [^\s]+$
+INFO\s+\.\s+DirectoryOrFile\s*:\s*.*, com\s*:\s*(Delete|Run|Replace)
+INFO\s+\d+,[^,]+,\d+$
+INFO\s+REPLACE:
