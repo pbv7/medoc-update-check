@@ -158,16 +158,15 @@ $rawPatterns = @(Get-Content $PatternsFile -Encoding utf8 | Where-Object {
 })
 
 # Validate patterns and filter out invalid ones
-$patterns = @()
-foreach ($p in $rawPatterns) {
+$patterns = @(foreach ($p in $rawPatterns) {
     try {
         [regex]::new($p) | Out-Null
-        $patterns += $p
+        $p
     }
     catch {
         Write-Warning "Skipping invalid regex pattern from '$PatternsFile': `"$p`". Error: $($_.Exception.Message)"
     }
-}
+})
 
 if ($patterns.Count -eq 0) {
     Write-Warning "No valid patterns found in $PatternsFile to apply."

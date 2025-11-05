@@ -233,16 +233,15 @@ if ($SkipStats) {
     })
 
     # Validate and combine patterns
-    $validPatterns = @()
-    foreach ($p in $rawPatterns) {
+    $validPatterns = @(foreach ($p in $rawPatterns) {
         try {
             [regex]::new($p) | Out-Null
-            $validPatterns += $p
+            $p
         }
         catch {
             # Skip invalid patterns silently in skip-stats mode
         }
-    }
+    })
 
     $combinedPattern = $validPatterns -join '|'
     $patternToUse = $combinedPattern
@@ -255,11 +254,18 @@ if ($SkipStats) {
 
 $totalKept = 0
 $totalExcluded = 0
+$allExcludedLines = @()
+
+# In interactive mode (not SkipStats), capture preview of excluded lines
+$capturePreview = -not $isSkippingStats
 
 foreach ($file in $files) {
-    $result = Apply-PatternToFile -File $file -Pattern $patternToUse -ExcludedDir $ExcludedDir -Encoding $encoding
+    $result = Apply-PatternToFile -File $file -Pattern $patternToUse -ExcludedDir $ExcludedDir -Encoding $encoding -CapturePreview:$capturePreview
     $totalKept += $result.KeptCount
     $totalExcluded += $result.ExcludedCount
+    if ($capturePreview) {
+        $allExcludedLines += $result.ExcludedLines
+    }
 }
 
 Write-Host "Processed $($files.Count) files" -ForegroundColor Green
@@ -272,6 +278,22 @@ if ($isSkippingStats) {
 
 Write-Host "Total lines kept: $totalKept" -ForegroundColor Green
 Write-Host "Total lines excluded: $totalExcluded" -ForegroundColor Green
+
+# Show preview of excluded lines in interactive mode
+if ($capturePreview -and $allExcludedLines.Count -gt 0) {
+    Write-Host ""
+    Write-Host "Preview of excluded lines (first $($allExcludedLines.Count) shown):" -ForegroundColor Yellow
+    Write-Host "─" * 80 -ForegroundColor DarkGray
+    foreach ($line in $allExcludedLines) {
+        Write-Host $line -ForegroundColor Gray
+    }
+    if ($totalExcluded -gt $allExcludedLines.Count) {
+        Write-Host "... and $($totalExcluded - $allExcludedLines.Count) more lines" -ForegroundColor DarkGray
+    }
+    Write-Host "─" * 80 -ForegroundColor DarkGray
+}
+
+Write-Host ""
 Write-Host "Pattern saved to: $PatternsFile" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "✅ Pattern added successfully!" -ForegroundColor Green

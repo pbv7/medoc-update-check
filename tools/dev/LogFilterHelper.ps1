@@ -57,13 +57,15 @@ function Apply-PatternToFile {
         [System.IO.FileInfo]$File,
         [string]$Pattern,
         [string]$ExcludedDir,
-        [System.Text.Encoding]$Encoding
+        [System.Text.Encoding]$Encoding,
+        [switch]$CapturePreview
     )
 
     $tempFile = New-TemporaryFile
     $excludedPath = Join-Path $ExcludedDir $File.Name
     $linesKeptInFile = 0
     $linesExcludedInFile = 0
+    $excludedLines = @()
 
     try {
         # Use StreamWriter for efficient buffered I/O
@@ -76,6 +78,10 @@ function Apply-PatternToFile {
                 if ($line -match $Pattern) {
                     $writerExcluded.WriteLine($line)
                     $linesExcludedInFile++
+                    # Capture first 5 lines for preview if requested
+                    if ($CapturePreview -and $excludedLines.Count -lt 5) {
+                        $excludedLines += $line
+                    }
                 } else {
                     $writerKept.WriteLine($line)
                     $linesKeptInFile++
@@ -100,6 +106,7 @@ function Apply-PatternToFile {
     return @{
         KeptCount = $linesKeptInFile
         ExcludedCount = $linesExcludedInFile
+        ExcludedLines = $excludedLines
     }
 }
 

@@ -155,7 +155,7 @@ Copied 5 file(s)
 
 ### Add-LogFilterPattern.ps1
 
-Add a single pattern interactively and apply it to logs.
+Add a single pattern interactively and apply it to logs. Displays a preview of excluded lines to help review what will be removed.
 
 **Usage:**
 
@@ -192,12 +192,40 @@ Add a single pattern interactively and apply it to logs.
 
 **Output:**
 
+In default mode (with detailed statistics):
+
 ```text
 Processing with pattern: INFO\s+Створення копії файлу:
 
 Processed 5 files
+Applied 1 pattern with detailed statistics
 Total lines kept: 45230
 Total lines excluded: 2100
+
+Preview of excluded lines (first 5 shown):
+────────────────────────────────────────────────────────────────────────────────
+INFO     Створення копії файлу: C:\path\to\file1.txt
+INFO     Створення копії файлу: C:\path\to\file2.exe
+INFO     Створення копії файлу: C:\MEDOCSRV\DATA\update.xml
+INFO     Створення копії файлу: D:\backup\archive.zip
+INFO     Створення копії файлу: C:\logs\system.log
+... and 2095 more lines
+────────────────────────────────────────────────────────────────────────────────
+
+Pattern saved to: patterns/cleanup-patterns.txt
+
+✅ Pattern added successfully!
+```
+
+With `-SkipStats` flag (single-pass, no preview):
+
+```text
+Processing with pattern: INFO\s+Створення копії файлу:
+
+Processed 5 files
+Applied 3 patterns in single pass
+Total lines kept: 42100
+Total lines excluded: 5230
 Pattern saved to: patterns/cleanup-patterns.txt
 
 ✅ Pattern added successfully!
