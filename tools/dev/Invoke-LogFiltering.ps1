@@ -139,57 +139,8 @@ if (-not ([System.Text.Encoding]::Encodings.Any({ $_.Name -eq "windows-1251" }))
 # Windows-1251 encoding for M.E.Doc compatibility
 $encoding = [System.Text.Encoding]::GetEncoding(1251)
 
-# Helper function to apply pattern to a single file and return statistics
-function Apply-PatternToFile {
-    param(
-        [System.IO.FileInfo]$File,
-        [string]$Pattern,
-        [string]$ExcludedDir,
-        [System.Text.Encoding]$Encoding
-    )
-
-    $tempFile = New-TemporaryFile
-    $excludedPath = Join-Path $ExcludedDir $File.Name
-    $linesKeptInFile = 0
-    $linesExcludedInFile = 0
-
-    try {
-        # Use StreamWriter for efficient buffered I/O
-        $writerKept = [System.IO.StreamWriter]::new($tempFile.FullName, $false, $Encoding)
-        $writerExcluded = [System.IO.StreamWriter]::new($excludedPath, $true, $Encoding)
-
-        try {
-            # Stream-process file line-by-line without loading entire file into memory
-            foreach ($line in [System.IO.File]::ReadLines($File.FullName, $Encoding)) {
-                if ($line -match $Pattern) {
-                    $writerExcluded.WriteLine($line)
-                    $linesExcludedInFile++
-                } else {
-                    $writerKept.WriteLine($line)
-                    $linesKeptInFile++
-                }
-            }
-        }
-        finally {
-            $writerKept.Dispose()
-            $writerExcluded.Dispose()
-        }
-
-        # Replace original file with filtered version
-        Move-Item -Path $tempFile.FullName -Destination $File.FullName -Force
-    }
-    finally {
-        # Ensure temporary file is cleaned up
-        if (Test-Path $tempFile.FullName) {
-            Remove-Item $tempFile.FullName -Force -ErrorAction SilentlyContinue
-        }
-    }
-
-    return @{
-        KeptCount = $linesKeptInFile
-        ExcludedCount = $linesExcludedInFile
-    }
-}
+# Dot-source the shared helper for file processing
+. (Join-Path $PSScriptRoot "LogFilterHelper.ps1")
 
 # Validate inputs
 if (-not (Test-Path $SourceDir)) {
