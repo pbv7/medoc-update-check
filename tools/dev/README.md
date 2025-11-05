@@ -336,7 +336,7 @@ If processing is slow:
   "INFO"
 
   # Better: More specific
-  "INFO\s+Создание копии"
+  "INFO\s+Створення копії"
   ```
 
 - **Too few:** Pattern too narrow, generalize it:
