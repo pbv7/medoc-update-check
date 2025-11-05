@@ -198,17 +198,27 @@ foreach ($pattern in $patterns) {
         $linesExcludedInFile = 0
 
         try {
-            # Stream-process file line-by-line without loading entire file into memory
-            # Use Get-Content with Encoding parameter for cross-platform support
-            Get-Content $file.FullName -Encoding $encoding -ReadCount 0 | ForEach-Object {
-                if ($_ -match $pattern) {
-                    $_ | Add-Content -Path $excludedPath -Encoding $encoding
-                    $linesExcludedInFile++
-                } else {
-                    $_ | Add-Content -Path $tempFile.FullName -Encoding $encoding
-                    $linesKeptInFile++
+            # Use StreamWriter for efficient buffered I/O instead of Add-Content (one open/close per line)
+            $writerKept = [System.IO.StreamWriter]::new($tempFile.FullName, $false, $encoding)
+            $writerExcluded = [System.IO.StreamWriter]::new($excludedPath, $true, $encoding)
+
+            try {
+                # Stream-process file line-by-line without loading entire file into memory
+                foreach ($line in [System.IO.File]::ReadLines($file.FullName, $encoding)) {
+                    if ($line -match $pattern) {
+                        $writerExcluded.WriteLine($line)
+                        $linesExcludedInFile++
+                    } else {
+                        $writerKept.WriteLine($line)
+                        $linesKeptInFile++
+                    }
                 }
             }
+            finally {
+                $writerKept.Dispose()
+                $writerExcluded.Dispose()
+            }
+
             # Replace original file with filtered version
             Move-Item -Path $tempFile.FullName -Destination $file.FullName -Force
         }

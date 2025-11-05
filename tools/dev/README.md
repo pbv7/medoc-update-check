@@ -252,10 +252,10 @@ Use standard PowerShell regex:
 | `+` | One or more | `ERROR+` |
 | `*` | Zero or more | `ERROR*` |
 | `?` | Optional | `ERROR?` |
-| `\|` | OR | `ERROR\|FAIL` |
+| `\|` | OR | `ERROR|FAIL` |
 | `^` | Line start | `^ERROR` |
 | `$` | Line end | `ERROR$` |
-| `()` | Group | `(ERROR\|FAIL)` |
+| `()` | Group | `(ERROR|FAIL)` |
 | `{n,m}` | Repeat | `\d{1,3}` |
 
 ### Testing Patterns
@@ -275,14 +275,16 @@ $line -match "INFO\s+Створення"
 
 ## Encoding
 
-**CRITICAL:** These tools handle M.E.Doc logs with specific encoding:
+**CRITICAL:** These tools handle M.E.Doc logs with specific encoding requirements:
 
 - **Input logs:** Windows-1251 (M.E.Doc standard)
-- **Pattern file:** UTF-8 (for cross-platform editing)
-- **Output logs:** Windows-1251 (maintains compatibility)
+- **Pattern file:** UTF-8 (must be saved as UTF-8 for correct Cyrillic handling)
+- **Output logs:** Windows-1251 (maintains compatibility with M.E.Doc)
 
-Do NOT manually edit the patterns file in a UTF-8 editor and overwrite it in
-Windows-1251 encoding. Use these scripts to add patterns.
+The `patterns/cleanup-patterns.txt` file **must** be saved with UTF-8 encoding to
+correctly handle Cyrillic characters. If you edit it manually with a text editor,
+ensure your editor is configured to save the file as UTF-8. Use the
+`Add-LogFilterPattern.ps1` script to add patterns if unsure about encoding.
 
 ## Performance Notes
 
