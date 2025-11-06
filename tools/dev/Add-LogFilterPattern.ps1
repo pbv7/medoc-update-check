@@ -226,11 +226,11 @@ if ($files.Count -eq 0) {
         Add-Content -Path $PatternsFile -Value $Pattern -Encoding utf8
         Write-Host ""
         Write-Host "✅ Pattern saved to: $PatternsFile" -ForegroundColor Green
+        Write-Host "Run the script again after adding log files to test the pattern." -ForegroundColor Cyan
     } else {
         Write-Host ""
         Write-Host "⚠️  Pattern already exists in: $PatternsFile" -ForegroundColor Yellow
     }
-    Write-Host "Run the script again after adding log files to test the pattern." -ForegroundColor Cyan
     return
 }
 
