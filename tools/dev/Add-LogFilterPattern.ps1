@@ -216,7 +216,8 @@ Write-Host ""
 # Normalize patterns by trimming to avoid treating ' pattern ' and 'pattern' as different.
 # This ensures consistent storage and comparison across runs.
 # Note: Internal regex whitespace (e.g., \s, \d) is preserved; only leading/trailing spaces are removed.
-# Use case-sensitive comparison (-cin) because regex patterns are case-sensitive (e.g., 'Error' != 'error')
+# Use case-sensitive comparison (-cin) for duplicate detection: regex patterns are case-sensitive
+# (e.g., 'Error' and 'error' are different patterns and should NOT be treated as duplicates)
 $existingPatterns = @(Get-Content $PatternsFile -Encoding utf8 -ErrorAction SilentlyContinue |
     ForEach-Object { $_.Trim() } |
     Where-Object { $_ -and -not $_.StartsWith('#') })
@@ -228,7 +229,8 @@ if ($trimmedPattern -cin $existingPatterns) {
     Write-Host ""
     Write-Host "Pattern: $Pattern" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "Run with a different pattern or edit $PatternsFile manually to remove duplicates." -ForegroundColor Cyan
+    Write-Host "To apply this pattern to new log files, use Invoke-LogFiltering.ps1 for batch processing." -ForegroundColor Cyan
+    Write-Host "To add a different pattern, provide a new regex." -ForegroundColor Cyan
     return
 }
 
