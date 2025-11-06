@@ -213,11 +213,14 @@ Write-Host "Processing with pattern: $Pattern" -ForegroundColor Cyan
 Write-Host ""
 
 # Check for duplicate before adding (consolidate this logic upfront)
-$existingPatterns = @(Get-Content $PatternsFile -Encoding utf8 -ErrorAction SilentlyContinue | Where-Object {
+# Trim patterns to avoid treating ' pattern ' and 'pattern' as different
+$existingPatterns = @(Get-Content $PatternsFile -Encoding utf8 -ErrorAction SilentlyContinue | ForEach-Object {
+    $_.Trim()
+} | Where-Object {
     $_ -and -not $_.StartsWith('#')
 })
 
-if ($Pattern -in $existingPatterns) {
+if ($Pattern.Trim() -in $existingPatterns) {
     Write-Warning "Pattern already exists in file. Skipping duplicate addition."
     Write-Host ""
     Write-Host "Pattern: $Pattern" -ForegroundColor Yellow
@@ -227,7 +230,8 @@ if ($Pattern -in $existingPatterns) {
 }
 
 # Append new pattern to file (using Add-Content for robustness with edited files)
-Add-Content -Path $PatternsFile -Value $Pattern -Encoding utf8
+# Trim the pattern to store consistently without accidental whitespace
+Add-Content -Path $PatternsFile -Value $Pattern.Trim() -Encoding utf8
 
 $files = Get-ChildItem $CleanedDir -Filter "update_*.log"
 
