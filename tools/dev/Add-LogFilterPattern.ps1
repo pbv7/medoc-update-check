@@ -297,14 +297,14 @@ Write-Host "Total lines excluded: $totalExcluded" -ForegroundColor Green
 if ($capturePreview -and $allExcludedLines.Count -gt 0) {
     Write-Host ""
     Write-Host "Preview of excluded lines (first $($allExcludedLines.Count) shown):" -ForegroundColor Yellow
-    Write-Host ("-" * 80) -ForegroundColor DarkGray
+    Write-Host ("─" * 80) -ForegroundColor DarkGray
     foreach ($line in $allExcludedLines) {
         Write-Host $line -ForegroundColor Gray
     }
     if ($totalExcluded -gt $allExcludedLines.Count) {
         Write-Host "... and $($totalExcluded - $allExcludedLines.Count) more lines" -ForegroundColor DarkGray
     }
-    Write-Host ("-" * 80) -ForegroundColor DarkGray
+    Write-Host ("─" * 80) -ForegroundColor DarkGray
 }
 
 Write-Host ""
