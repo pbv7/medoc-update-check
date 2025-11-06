@@ -216,15 +216,17 @@ Write-Host ""
 # Normalize patterns by trimming to avoid treating ' pattern ' and 'pattern' as different.
 # This ensures consistent storage and comparison across runs.
 # Note: Internal regex whitespace (e.g., \s, \d) is preserved; only leading/trailing spaces are removed.
+# Use case-sensitive comparison (-cin) because regex patterns are case-sensitive (e.g., 'Error' != 'error')
 $existingPatterns = @(Get-Content $PatternsFile -Encoding utf8 -ErrorAction SilentlyContinue | ForEach-Object {
-    if ($_ -and -not $_.StartsWith('#')) {
-        $_.Trim()
+    $line = $_.Trim()
+    if ($line -and -not $line.StartsWith('#')) {
+        $line
     }
 })
 
 $trimmedPattern = $Pattern.Trim()
 
-if ($trimmedPattern -in $existingPatterns) {
+if ($trimmedPattern -cin $existingPatterns) {
     Write-Warning "Pattern already exists in file. Skipping duplicate addition."
     Write-Host ""
     Write-Host "Pattern: $Pattern" -ForegroundColor Yellow

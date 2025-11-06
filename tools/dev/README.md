@@ -195,6 +195,7 @@ All patterns are stored with leading and trailing whitespace removed (trimmed). 
 - The pattern library stays clean and consistent across runs
 - Internal regex whitespace (e.g., `\s+`, `\d{1,3}`) is preserved
 - Only accidental copy-paste spaces are removed
+- Duplicate detection is **case-sensitive** (e.g., `'Error'` and `'error'` are different patterns)
 
 **Example:**
 
