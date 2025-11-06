@@ -217,12 +217,9 @@ Write-Host ""
 # This ensures consistent storage and comparison across runs.
 # Note: Internal regex whitespace (e.g., \s, \d) is preserved; only leading/trailing spaces are removed.
 # Use case-sensitive comparison (-cin) because regex patterns are case-sensitive (e.g., 'Error' != 'error')
-$existingPatterns = @(Get-Content $PatternsFile -Encoding utf8 -ErrorAction SilentlyContinue | ForEach-Object {
-    $line = $_.Trim()
-    if ($line -and -not $line.StartsWith('#')) {
-        $line
-    }
-})
+$existingPatterns = @(Get-Content $PatternsFile -Encoding utf8 -ErrorAction SilentlyContinue |
+    ForEach-Object { $_.Trim() } |
+    Where-Object { $_ -and -not $_.StartsWith('#') })
 
 $trimmedPattern = $Pattern.Trim()
 
