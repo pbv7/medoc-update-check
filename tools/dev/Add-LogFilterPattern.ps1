@@ -213,11 +213,12 @@ Write-Host "Processing with pattern: $Pattern" -ForegroundColor Cyan
 Write-Host ""
 
 # Check for duplicate before adding (consolidate this logic upfront)
-# Trim patterns to avoid treating ' pattern ' and 'pattern' as different
+# Trim patterns only for comparison to avoid treating ' pattern ' and 'pattern' as different
+# but preserve the original pattern's whitespace when storing (whitespace is significant in regex)
 $existingPatterns = @(Get-Content $PatternsFile -Encoding utf8 -ErrorAction SilentlyContinue | ForEach-Object {
-    $_.Trim()
-} | Where-Object {
-    $_ -and -not $_.StartsWith('#')
+    if ($_ -and -not $_.StartsWith('#')) {
+        $_.Trim()
+    }
 })
 
 if ($Pattern.Trim() -in $existingPatterns) {
@@ -230,8 +231,8 @@ if ($Pattern.Trim() -in $existingPatterns) {
 }
 
 # Append new pattern to file (using Add-Content for robustness with edited files)
-# Trim the pattern to store consistently without accidental whitespace
-Add-Content -Path $PatternsFile -Value $Pattern.Trim() -Encoding utf8
+# Store the pattern as-is to preserve regex whitespace significance
+Add-Content -Path $PatternsFile -Value $Pattern -Encoding utf8
 
 $files = Get-ChildItem $CleanedDir -Filter "update_*.log"
 
