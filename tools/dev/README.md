@@ -183,19 +183,21 @@ adding it. If you attempt to add a duplicate pattern, the script will:
 
 - Display a warning that the pattern already exists
 - Skip adding the duplicate
-- Suggest editing the patterns file manually if needed
+- Suggest using a different pattern
 
 This prevents accumulation of duplicate entries in `patterns/cleanup-patterns.txt`.
 
-**Pattern Normalization:**
+**Important Note on Pattern Input:**
 
-All patterns are stored with leading and trailing whitespace removed (trimmed). This ensures:
+Patterns are stored **exactly as provided** to preserve user intent. Leading and trailing whitespace
+are significant in regular expressions:
 
-- Patterns like `'mypattern'` and `' mypattern '` are recognized as duplicates
-- The pattern library stays clean and consistent across runs
-- Internal regex whitespace (e.g., `\s+`, `\d{1,3}`) is preserved
-- Only accidental copy-paste spaces are removed
-- Duplicate detection is **case-sensitive** (e.g., `'Error'` and `'error'` are different patterns)
+- `'ERROR'` matches "ERROR" anywhere in a line
+- `' ERROR'` matches " ERROR" (space-prefixed) specifically
+- `'Error'` and `'error'` are treated as different patterns (case-sensitive)
+
+If you add the same pattern twice (including whitespace), the script will detect it as a duplicate
+and reject it. To add a semantically different pattern, provide it exactly as intended.
 
 **Example:**
 
