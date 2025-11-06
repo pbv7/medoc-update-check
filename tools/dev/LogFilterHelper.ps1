@@ -117,3 +117,21 @@ function Invoke-PatternFilter {
         ExcludedLines = $excludedLines
     }
 }
+
+function Get-LogFilterPatterns {
+    <#
+    .SYNOPSIS
+    Load and filter regex patterns from the patterns file.
+    .DESCRIPTION
+    Reads the patterns file, filtering out empty lines and comment lines.
+    Centralizes the pattern loading logic used by multiple scripts.
+    .PARAMETER PatternsFile
+    Path to the patterns file to read.
+    .OUTPUTS
+    Array of pattern strings (empty/comment lines removed).
+    #>
+    param([string]$PatternsFile)
+
+    return @(Get-Content $PatternsFile -Encoding utf8 -ErrorAction SilentlyContinue |
+        Where-Object { $_ -and -not $_.StartsWith('#') })
+}

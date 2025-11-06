@@ -217,8 +217,7 @@ Write-Host ""
 # (e.g., 'Error' and 'error' are different patterns and should NOT be treated as duplicates)
 # Note: Patterns are compared and stored exactly as provided to preserve user intent.
 # Leading/trailing spaces are significant in regex (e.g., ' ERROR' vs 'ERROR'), so we do not trim.
-$existingPatterns = @(Get-Content $PatternsFile -Encoding utf8 -ErrorAction SilentlyContinue |
-    Where-Object { $_ -and -not $_.StartsWith('#') })
+$existingPatterns = @(Get-LogFilterPatterns -PatternsFile $PatternsFile)
 
 if ($Pattern -cin $existingPatterns) {
     Write-Warning "Pattern already exists in file. Skipping duplicate addition."
@@ -247,9 +246,7 @@ if ($files.Count -eq 0) {
 # Determine which pattern(s) to apply
 if ($SkipStats) {
     # Combine all patterns (including the new one) for single-pass processing
-    $rawPatterns = @(Get-Content $PatternsFile -Encoding utf8 | Where-Object {
-        $_ -and -not $_.StartsWith('#')
-    })
+    $rawPatterns = @(Get-LogFilterPatterns -PatternsFile $PatternsFile)
 
     # Validate and combine patterns
     $validPatterns = @(foreach ($p in $rawPatterns) {
