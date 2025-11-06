@@ -117,6 +117,3 @@ function Invoke-PatternFilter {
         ExcludedLines = $excludedLines
     }
 }
-
-# Export function for use by dot-sourcing scripts
-Export-ModuleFunction -Function Invoke-PatternFilter -ErrorAction SilentlyContinue

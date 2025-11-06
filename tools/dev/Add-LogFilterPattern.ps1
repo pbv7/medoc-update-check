@@ -216,14 +216,39 @@ $files = Get-ChildItem $CleanedDir -Filter "update_*.log"
 
 if ($files.Count -eq 0) {
     Write-Warning "No 'update_*.log' files found in '$CleanedDir' to process. The pattern will be saved without being tested."
-    Add-Content -Path $PatternsFile -Value $Pattern -Encoding utf8
-    Write-Host ""
-    Write-Host "✅ Pattern saved to: $PatternsFile" -ForegroundColor Green
+
+    # Check for duplicate before adding
+    $existingPatterns = @(Get-Content $PatternsFile -Encoding utf8 -ErrorAction SilentlyContinue | Where-Object {
+        $_ -and -not $_.StartsWith('#')
+    })
+
+    if ($Pattern -notin $existingPatterns) {
+        Add-Content -Path $PatternsFile -Value $Pattern -Encoding utf8
+        Write-Host ""
+        Write-Host "✅ Pattern saved to: $PatternsFile" -ForegroundColor Green
+    } else {
+        Write-Host ""
+        Write-Host "⚠️  Pattern already exists in: $PatternsFile" -ForegroundColor Yellow
+    }
     Write-Host "Run the script again after adding log files to test the pattern." -ForegroundColor Cyan
     return
 }
 
-# Append new pattern to file first (using Add-Content for robustness with edited files)
+# Check for duplicate before adding
+$existingPatterns = @(Get-Content $PatternsFile -Encoding utf8 -ErrorAction SilentlyContinue | Where-Object {
+    $_ -and -not $_.StartsWith('#')
+})
+
+if ($Pattern -in $existingPatterns) {
+    Write-Warning "Pattern already exists in file. Skipping duplicate addition."
+    Write-Host ""
+    Write-Host "Pattern: $Pattern" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Run with a different pattern or edit $PatternsFile manually to remove duplicates." -ForegroundColor Cyan
+    return
+}
+
+# Append new pattern to file (using Add-Content for robustness with edited files)
 Add-Content -Path $PatternsFile -Value $Pattern -Encoding utf8
 
 # Determine which pattern(s) to apply
@@ -284,14 +309,14 @@ Write-Host "Total lines excluded: $totalExcluded" -ForegroundColor Green
 if ($capturePreview -and $allExcludedLines.Count -gt 0) {
     Write-Host ""
     Write-Host "Preview of excluded lines (first $($allExcludedLines.Count) shown):" -ForegroundColor Yellow
-    Write-Host "─" * 80 -ForegroundColor DarkGray
+    Write-Host ("-" * 80) -ForegroundColor DarkGray
     foreach ($line in $allExcludedLines) {
         Write-Host $line -ForegroundColor Gray
     }
     if ($totalExcluded -gt $allExcludedLines.Count) {
         Write-Host "... and $($totalExcluded - $allExcludedLines.Count) more lines" -ForegroundColor DarkGray
     }
-    Write-Host "─" * 80 -ForegroundColor DarkGray
+    Write-Host ("-" * 80) -ForegroundColor DarkGray
 }
 
 Write-Host ""
