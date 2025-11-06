@@ -130,7 +130,11 @@ function Get-LogFilterPatterns {
     .OUTPUTS
     Array of pattern strings (empty/comment lines removed).
     #>
-    param([string]$PatternsFile)
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$PatternsFile
+    )
 
     return @(Get-Content $PatternsFile -Encoding utf8 -ErrorAction SilentlyContinue |
         Where-Object { $_ -and -not $_.StartsWith('#') })

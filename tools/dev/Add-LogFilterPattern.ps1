@@ -246,7 +246,8 @@ if ($files.Count -eq 0) {
 # Determine which pattern(s) to apply
 if ($SkipStats) {
     # Combine all patterns (including the new one) for single-pass processing
-    $rawPatterns = @(Get-LogFilterPatterns -PatternsFile $PatternsFile)
+    # Reuse $existingPatterns to avoid redundant file read; just append the new pattern
+    $rawPatterns = @($existingPatterns + $Pattern)
 
     # Validate and combine patterns
     $validPatterns = @(foreach ($p in $rawPatterns) {
