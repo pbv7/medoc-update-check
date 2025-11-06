@@ -213,15 +213,18 @@ Write-Host "Processing with pattern: $Pattern" -ForegroundColor Cyan
 Write-Host ""
 
 # Check for duplicate before adding (consolidate this logic upfront)
-# Trim patterns only for comparison to avoid treating ' pattern ' and 'pattern' as different
-# but preserve the original pattern's whitespace when storing (whitespace is significant in regex)
+# Normalize patterns by trimming to avoid treating ' pattern ' and 'pattern' as different.
+# This ensures consistent storage and comparison across runs.
+# Note: Internal regex whitespace (e.g., \s, \d) is preserved; only leading/trailing spaces are removed.
 $existingPatterns = @(Get-Content $PatternsFile -Encoding utf8 -ErrorAction SilentlyContinue | ForEach-Object {
     if ($_ -and -not $_.StartsWith('#')) {
         $_.Trim()
     }
 })
 
-if ($Pattern.Trim() -in $existingPatterns) {
+$trimmedPattern = $Pattern.Trim()
+
+if ($trimmedPattern -in $existingPatterns) {
     Write-Warning "Pattern already exists in file. Skipping duplicate addition."
     Write-Host ""
     Write-Host "Pattern: $Pattern" -ForegroundColor Yellow
@@ -230,9 +233,9 @@ if ($Pattern.Trim() -in $existingPatterns) {
     return
 }
 
-# Append new pattern to file (using Add-Content for robustness with edited files)
-# Store the pattern as-is to preserve regex whitespace significance
-Add-Content -Path $PatternsFile -Value $Pattern -Encoding utf8
+# Append trimmed pattern to file for consistency
+# This ensures the file contains clean patterns without accidental leading/trailing whitespace
+Add-Content -Path $PatternsFile -Value $trimmedPattern -Encoding utf8
 
 $files = Get-ChildItem $CleanedDir -Filter "update_*.log"
 

@@ -187,6 +187,15 @@ adding it. If you attempt to add a duplicate pattern, the script will:
 
 This prevents accumulation of duplicate entries in `patterns/cleanup-patterns.txt`.
 
+**Pattern Normalization:**
+
+All patterns are stored with leading and trailing whitespace removed (trimmed). This ensures:
+
+- Patterns like `'mypattern'` and `' mypattern '` are recognized as duplicates
+- The pattern library stays clean and consistent across runs
+- Internal regex whitespace (e.g., `\s+`, `\d{1,3}`) is preserved
+- Only accidental copy-paste spaces are removed
+
 **Example:**
 
 ```powershell
