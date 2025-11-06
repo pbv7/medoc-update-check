@@ -155,7 +155,9 @@ Copied 5 file(s)
 
 ### Add-LogFilterPattern.ps1
 
-Add a single pattern interactively and apply it to logs. Displays a preview of excluded lines to help review what will be removed.
+Add a single pattern interactively and apply it to logs. Displays a preview of excluded lines
+to help review what will be removed. Automatically prevents duplicate patterns from being added
+to the library.
 
 **Usage:**
 
@@ -172,7 +174,30 @@ Add a single pattern interactively and apply it to logs. Displays a preview of e
 | CleanedDir | logs/cleaned | Directory for in-place filtering. Populated from `SourceDir` on first run. |
 | ExcludedDir | logs/excluded | Excluded lines archive |
 | PatternsFile | patterns/cleanup-patterns.txt | Pattern library |
-| SkipStats | $false | Skip per-pattern statistics and use single-pass processing for speed (useful with many patterns or very large logs) |
+| SkipStats | $false | Skip per-pattern statistics and use single-pass processing for speed |
+
+**Duplicate Prevention:**
+
+The script automatically checks if a pattern already exists in the pattern library before
+adding it. If you attempt to add a duplicate pattern, the script will:
+
+- Display a warning that the pattern already exists
+- Skip adding the duplicate
+- Suggest using a different pattern
+
+This prevents accumulation of duplicate entries in `patterns/cleanup-patterns.txt`.
+
+**Important Note on Pattern Input:**
+
+Patterns are stored **exactly as provided** to preserve user intent. Leading and trailing whitespace
+are significant in regular expressions:
+
+- `'ERROR'` matches "ERROR" anywhere in a line
+- `' ERROR'` matches " ERROR" (space-prefixed) specifically
+- `'Error'` and `'error'` are treated as different patterns (case-sensitive)
+
+If you add the same pattern twice (including whitespace), the script will detect it as a duplicate
+and reject it. To add a semantically different pattern, provide it exactly as intended.
 
 **Example:**
 

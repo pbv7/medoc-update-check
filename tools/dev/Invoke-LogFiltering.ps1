@@ -153,9 +153,7 @@ if (-not (Test-Path $PatternsFile)) {
 }
 
 # Read all patterns (skip empty lines and comments)
-$rawPatterns = @(Get-Content $PatternsFile -Encoding utf8 | Where-Object {
-    $_ -and -not $_.StartsWith('#')
-})
+$rawPatterns = @(Get-LogFilterPatterns -PatternsFile $PatternsFile)
 
 # Validate patterns and filter out invalid ones
 $patterns = @(foreach ($p in $rawPatterns) {

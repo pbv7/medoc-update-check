@@ -212,26 +212,42 @@ if ($cleanedFiles.Count -eq 0 -and $sourceFiles.Count -gt 0) {
 Write-Host "Processing with pattern: $Pattern" -ForegroundColor Cyan
 Write-Host ""
 
+# Check for duplicate before adding (consolidate this logic upfront)
+# Use case-sensitive comparison (-cin) for duplicate detection: regex patterns are case-sensitive
+# (e.g., 'Error' and 'error' are different patterns and should NOT be treated as duplicates)
+# Note: Patterns are compared and stored exactly as provided to preserve user intent.
+# Leading/trailing spaces are significant in regex (e.g., ' ERROR' vs 'ERROR'), so we do not trim.
+$existingPatterns = @(Get-LogFilterPatterns -PatternsFile $PatternsFile)
+
+if ($Pattern -cin $existingPatterns) {
+    Write-Warning "Pattern already exists in file. Skipping duplicate addition."
+    Write-Host ""
+    Write-Host "Pattern: $Pattern" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "To apply this pattern to new log files, use Invoke-LogFiltering.ps1 for batch processing." -ForegroundColor Cyan
+    Write-Host "To add a different pattern, provide a new regex." -ForegroundColor Cyan
+    return
+}
+
+# Append pattern to file exactly as provided by user
+# This preserves user intent for patterns with significant leading/trailing whitespace
+Add-Content -Path $PatternsFile -Value $Pattern -Encoding utf8
+
 $files = Get-ChildItem $CleanedDir -Filter "update_*.log"
 
 if ($files.Count -eq 0) {
     Write-Warning "No 'update_*.log' files found in '$CleanedDir' to process. The pattern will be saved without being tested."
-    Add-Content -Path $PatternsFile -Value $Pattern -Encoding utf8
     Write-Host ""
     Write-Host "✅ Pattern saved to: $PatternsFile" -ForegroundColor Green
     Write-Host "Run the script again after adding log files to test the pattern." -ForegroundColor Cyan
     return
 }
 
-# Append new pattern to file first (using Add-Content for robustness with edited files)
-Add-Content -Path $PatternsFile -Value $Pattern -Encoding utf8
-
 # Determine which pattern(s) to apply
 if ($SkipStats) {
     # Combine all patterns (including the new one) for single-pass processing
-    $rawPatterns = @(Get-Content $PatternsFile -Encoding utf8 | Where-Object {
-        $_ -and -not $_.StartsWith('#')
-    })
+    # Reuse $existingPatterns to avoid redundant file read; just append the new pattern
+    $rawPatterns = @($existingPatterns + $Pattern)
 
     # Validate and combine patterns
     $validPatterns = @(foreach ($p in $rawPatterns) {
@@ -284,14 +300,14 @@ Write-Host "Total lines excluded: $totalExcluded" -ForegroundColor Green
 if ($capturePreview -and $allExcludedLines.Count -gt 0) {
     Write-Host ""
     Write-Host "Preview of excluded lines (first $($allExcludedLines.Count) shown):" -ForegroundColor Yellow
-    Write-Host "─" * 80 -ForegroundColor DarkGray
+    Write-Host ("─" * 80) -ForegroundColor DarkGray
     foreach ($line in $allExcludedLines) {
         Write-Host $line -ForegroundColor Gray
     }
     if ($totalExcluded -gt $allExcludedLines.Count) {
         Write-Host "... and $($totalExcluded - $allExcludedLines.Count) more lines" -ForegroundColor DarkGray
     }
-    Write-Host "─" * 80 -ForegroundColor DarkGray
+    Write-Host ("─" * 80) -ForegroundColor DarkGray
 }
 
 Write-Host ""
