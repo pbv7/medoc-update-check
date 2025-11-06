@@ -212,29 +212,7 @@ if ($cleanedFiles.Count -eq 0 -and $sourceFiles.Count -gt 0) {
 Write-Host "Processing with pattern: $Pattern" -ForegroundColor Cyan
 Write-Host ""
 
-$files = Get-ChildItem $CleanedDir -Filter "update_*.log"
-
-if ($files.Count -eq 0) {
-    Write-Warning "No 'update_*.log' files found in '$CleanedDir' to process. The pattern will be saved without being tested."
-
-    # Check for duplicate before adding
-    $existingPatterns = @(Get-Content $PatternsFile -Encoding utf8 -ErrorAction SilentlyContinue | Where-Object {
-        $_ -and -not $_.StartsWith('#')
-    })
-
-    if ($Pattern -notin $existingPatterns) {
-        Add-Content -Path $PatternsFile -Value $Pattern -Encoding utf8
-        Write-Host ""
-        Write-Host "✅ Pattern saved to: $PatternsFile" -ForegroundColor Green
-        Write-Host "Run the script again after adding log files to test the pattern." -ForegroundColor Cyan
-    } else {
-        Write-Host ""
-        Write-Host "⚠️  Pattern already exists in: $PatternsFile" -ForegroundColor Yellow
-    }
-    return
-}
-
-# Check for duplicate before adding
+# Check for duplicate before adding (consolidate this logic upfront)
 $existingPatterns = @(Get-Content $PatternsFile -Encoding utf8 -ErrorAction SilentlyContinue | Where-Object {
     $_ -and -not $_.StartsWith('#')
 })
@@ -250,6 +228,16 @@ if ($Pattern -in $existingPatterns) {
 
 # Append new pattern to file (using Add-Content for robustness with edited files)
 Add-Content -Path $PatternsFile -Value $Pattern -Encoding utf8
+
+$files = Get-ChildItem $CleanedDir -Filter "update_*.log"
+
+if ($files.Count -eq 0) {
+    Write-Warning "No 'update_*.log' files found in '$CleanedDir' to process. The pattern will be saved without being tested."
+    Write-Host ""
+    Write-Host "✅ Pattern saved to: $PatternsFile" -ForegroundColor Green
+    Write-Host "Run the script again after adding log files to test the pattern." -ForegroundColor Cyan
+    return
+}
 
 # Determine which pattern(s) to apply
 if ($SkipStats) {
