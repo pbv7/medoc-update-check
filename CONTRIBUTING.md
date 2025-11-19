@@ -100,7 +100,7 @@ If you're an AI agent (Claude, Gemini, GitHub Copilot, Cursor, Codeium, etc.), s
 comprehensive AI agent guides:
 
 - **[AGENTS.md](AGENTS.md)** - Quick-start reference for AI agents (also accessible via
-  `CLAUDE.md` / `GEMINI.md` aliases)
+  [CLAUDE.md](CLAUDE.md) / [GEMINI.md](GEMINI.md) aliases)
 - **[AGENTS-CODE-STANDARDS.md](AGENTS-CODE-STANDARDS.md)** - PowerShell code style, naming
   conventions, modern PS7+ features, and removed cmdlets to avoid
 - **[AGENTS-TESTING.md](AGENTS-TESTING.md)** - Testing procedures, Pester syntax, enum usage,

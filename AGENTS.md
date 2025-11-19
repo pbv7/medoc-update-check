@@ -4,7 +4,7 @@ Quick-start reference for AI agents working on the M.E.Doc Update Check project.
 provides essential context and links to specialized guides to help AI coding agents (Claude,
 Gemini, GitHub Copilot, Cursor, Codeium, etc.) work effectively on this codebase.
 
-**File:** `CLAUDE.md` / `GEMINI.md` (universal, despite the filename)
+**File:** [CLAUDE.md](CLAUDE.md) / [GEMINI.md](GEMINI.md) (universal, despite the filename)
 
 **For humans:** See [README.md](README.md) for project overview and [CONTRIBUTING.md](CONTRIBUTING.md)
 for contribution guidelines.
