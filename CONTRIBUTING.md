@@ -218,6 +218,7 @@ Project Root/
 ├── CONTRIBUTING.md                           # This file (contributor guidelines)
 ├── AGENTS.md                                 # For AI agents (Claude, Copilot, Cursor)
 ├── CLAUDE.md                                 # Alias for AGENTS.md (Claude Code compatibility)
+├── GEMINI.md                                 # Alias for AGENTS.md (Gemini compatibility)
 ├── CODE_OF_CONDUCT.md                        # Community standards
 ├── LICENSE                                   # Apache 2.0 license
 └── NOTICE                                    # Attribution and dependencies
