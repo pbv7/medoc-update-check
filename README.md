@@ -52,12 +52,12 @@ This project has comprehensive documentation. Choose your entry point based on y
 | **Want to test changes?** | [TESTING.md](TESTING.md) | Test procedures, message formats, test data |
 | **Want to contribute code?** | [CONTRIBUTING.md](CONTRIBUTING.md) | Development guidelines, commit standards, testing |
 | **Concerned about security?** | [SECURITY.md](SECURITY.md) | Credential handling, Event Log, best practices |
-| **AI coding agent?** | [AGENTS.md](AGENTS.md) | Quick reference (also [CLAUDE.md](CLAUDE.md)) + 5 specialized guides |
+| **AI coding agent?** | [AGENTS.md](AGENTS.md) | Quick reference (also [CLAUDE.md](CLAUDE.md)/[GEMINI.md](GEMINI.md)) + 5 specialized guides |
 | **Need quick overview?** | [README.md](README.md) (you are here) | Project overview, features, example messages |
 
-### AI Agent Guides (For Claude, Copilot, Cursor, Codeium, etc.)
+### AI Agent Guides (For Claude, Gemini, Copilot, Cursor, Codeium, etc.)
 
-Start with [AGENTS.md](AGENTS.md) (or [CLAUDE.md](CLAUDE.md) symlink), then navigate to
+Start with [AGENTS.md](AGENTS.md) (or [CLAUDE.md](CLAUDE.md)/[GEMINI.md](GEMINI.md) symlinks), then navigate to
 specialized guides as needed:
 
 - **[AGENTS-CODE-STANDARDS.md](AGENTS-CODE-STANDARDS.md)** - Code style, naming conventions,
