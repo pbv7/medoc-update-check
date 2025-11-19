@@ -2,7 +2,7 @@
 
 Quick-start reference for AI agents working on the M.E.Doc Update Check project. This file
 provides essential context and links to specialized guides to help AI coding agents (Claude,
-GitHub Copilot, Cursor, Codeium, etc.) work effectively on this codebase.
+Gemini, GitHub Copilot, Cursor, Codeium, etc.) work effectively on this codebase.
 
 **File:** `CLAUDE.md` / `GEMINI.md` (universal, despite the filename)
 
