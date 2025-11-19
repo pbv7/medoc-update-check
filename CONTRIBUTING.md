@@ -96,11 +96,11 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force"
 
 ### For AI Coding Agents
 
-If you're an AI agent (Claude, GitHub Copilot, Cursor, Codeium, etc.), start with the
+If you're an AI agent (Claude, Gemini, GitHub Copilot, Cursor, Codeium, etc.), start with the
 comprehensive AI agent guides:
 
 - **[AGENTS.md](AGENTS.md)** - Quick-start reference for AI agents (also accessible via
-  `CLAUDE.md` symlink)
+  [CLAUDE.md](CLAUDE.md) / [GEMINI.md](GEMINI.md) aliases)
 - **[AGENTS-CODE-STANDARDS.md](AGENTS-CODE-STANDARDS.md)** - PowerShell code style, naming
   conventions, modern PS7+ features, and removed cmdlets to avoid
 - **[AGENTS-TESTING.md](AGENTS-TESTING.md)** - Testing procedures, Pester syntax, enum usage,
@@ -216,8 +216,9 @@ Project Root/
 ├── TESTING.md                                # Testing procedures and examples
 ├── SECURITY.md                               # Security, credentials, Event Log
 ├── CONTRIBUTING.md                           # This file (contributor guidelines)
-├── AGENTS.md                                 # For AI agents (Claude, Copilot, Cursor)
-├── CLAUDE.md                                 # Symlink to AGENTS.md (Claude Code compatibility)
+├── AGENTS.md                                 # For AI agents (Claude, Gemini, Copilot, Cursor)
+├── CLAUDE.md                                 # Alias for AGENTS.md (Claude Code compatibility)
+├── GEMINI.md                                 # Alias for AGENTS.md (Gemini compatibility)
 ├── CODE_OF_CONDUCT.md                        # Community standards
 ├── LICENSE                                   # Apache 2.0 license
 └── NOTICE                                    # Attribution and dependencies
