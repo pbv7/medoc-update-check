@@ -57,7 +57,7 @@ This project has comprehensive documentation. Choose your entry point based on y
 
 ### AI Agent Guides (For Claude, Gemini, Copilot, Cursor, Codeium, etc.)
 
-Start with [AGENTS.md](AGENTS.md) (or [CLAUDE.md](CLAUDE.md)/[GEMINI.md](GEMINI.md) symlinks), then navigate to
+Start with [AGENTS.md](AGENTS.md) (or [CLAUDE.md](CLAUDE.md)/[GEMINI.md](GEMINI.md) aliases), then navigate to
 specialized guides as needed:
 
 - **[AGENTS-CODE-STANDARDS.md](AGENTS-CODE-STANDARDS.md)** - Code style, naming conventions,
