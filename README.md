@@ -296,7 +296,7 @@ For complete Event ID reference with troubleshooting steps, see [SECURITY.md - E
 - **1000-1099** - Normal flow (success, no update)
 - **1100-1199** - Configuration errors (missing keys, invalid values)
 - **1200-1299** - Environment/filesystem errors (missing logs, directory issues)
-- **1300-1399** - Update validation failures (missing flags)
+- **1300-1399** - Update validation failures (missing markers)
 - **1400-1499** - Notification errors (Telegram API, send failures)
 - **1500-1599** - Checkpoint/state persistence errors
 - **1900+** - Unexpected/general errors
@@ -407,7 +407,7 @@ $config
 Import-Module ".\lib\MedocUpdateCheck.psm1" -Force
 Get-Module MedocUpdateCheck
 
-# Test update check function (dual-log validation)
+# Test update check function (2-marker validation)
 Test-UpdateOperationSuccess -MedocLogsPath "D:\MedocSRV\LOG"
 
 # Run entire check with server's hostname
@@ -477,23 +477,23 @@ Checked: 28.10.2025 12:33:45
 
 ### ❌ Update Failed
 
-When any of the three success flags are missing, Telegram notification shows:
+When update validation fails (missing required markers), Telegram notification shows:
 
 ```text
 ❌ UPDATE FAILED | MY-MEDOC-SERVER
 Version: 11.02.183 → 11.02.184
 Started: 28.10.2025 11:32:14
 Failed at: 28.10.2025 11:47:15
-Flag1 (Infrastructure): ✗
-Flag2 (Service Restart): ✓
-Flag3 (Version Confirmed): ✓
-Reason: Missing success flags
+Reason: Missing required markers: Version confirmation
 Checked: 28.10.2025 11:50:06
 ```
 
-The message lists the status of each validation flag (✓ = passed, ✗ = failed) to help identify
-the root cause. Windows Event Log receives additional details through separate flag fields
-(Flag1, Flag2, Flag3) for automated alerting.
+The reason explains which markers were missing:
+
+- "Missing version marker" - Update completed but version confirmation not found
+- "Missing completion marker" - Update operation did not finish properly
+
+Windows Event Log receives additional details with marker status for automated alerting.
 
 ### ℹ️ No Updates
 
@@ -504,7 +504,7 @@ Checked: 28.10.2025 12:33:45
 
 ## Module Functions
 
-The M.E.Doc Update Check module exports 6 public functions for use in custom scripts:
+The M.E.Doc Update Check module exports 10 public functions for use in custom scripts:
 
 ### Core Functions
 
@@ -512,10 +512,10 @@ The M.E.Doc Update Check module exports 6 public functions for use in custom scr
 
 Returns status object with fields:
 
-- `Status`: "Success", "NoUpdate", or "Error"
+- `Status`: "Success", "Failed", "NoUpdate", or "Error"
 - `ErrorId`: MedocEventId enum value (1000-1900+) for categorizing the result
-- For **Success**: Also includes Version info, Timestamps, and Flag details
-- For **NoUpdate**: Minimal (just Status + ErrorId)
+- For **Success/Failed**: Includes version info, timestamps, marker detection flags, and reason text
+- For **NoUpdate**: Minimal (Status + ErrorId + message)
 - For **Error**: Status + ErrorId + error Message
 
 Supports checkpoint filtering (since parameter) to avoid processing same updates twice.
@@ -536,7 +536,7 @@ Returns based on status:
 
 - **Success**: `✅ UPDATE OK | ServerName\nVersion: X → Y\nStarted: time\nCompleted: time\nDuration: X min Y sec\nChecked: time`
 - **NoUpdate**: `ℹ️ NO UPDATE | ServerName\nChecked: time` (informational, not an error)
-- **Error**: `❌ UPDATE FAILED | ServerName\nVersion: X → Y\nValidation Failures: [missing flags]\nReason: [error]\nChecked: time`
+- **Failed/Error**: `❌ UPDATE FAILED | ServerName\nVersion: X → Y\nStarted: time\nFailed at: time\nReason: [reason]\nChecked: time`
 
 **`Format-UpdateEventLogMessage`** - Creates Event Log entry text based on status
 
@@ -544,7 +544,7 @@ Returns key=value format based on status:
 
 - **Success**: `Server=X | Status=UPDATE_OK | FromVersion=X | ToVersion=Y | UpdateStarted=time | UpdateCompleted=time | Duration=X | CheckTime=time`
 - **NoUpdate**: `Server=X | Status=NO_UPDATE | CheckTime=time`
-- **Error**: `Server=X | Status=UPDATE_FAILED | FromVersion=X | ToVersion=Y | Flag1=value | Flag2=value | Flag3=value | Reason=[error] | CheckTime=time`
+- **Error**: `Server=X | Status=UPDATE_FAILED | FromVersion=X | ToVersion=Y | Reason=[error] | CheckTime=time`
 
 ### Utility Functions
 
@@ -574,7 +574,7 @@ All Event Log entries use standardized EventIDs for monitoring and troubleshooti
 | **1001** | ℹ️ Info | No update detected (normal) |
 | **1100-1101** | ❌ Error | Configuration errors |
 | **1200-1204** | ❌ Error | Filesystem/environment errors |
-| **1300-1303** | ❌ Error | Update validation failures |
+| **1302** | ❌ Error | Update validation failures |
 | **1400-1401** | ❌ Error | Telegram/notification errors |
 | **1500** | ❌ Error | Checkpoint write failed |
 | **1900** | ❌ Error | Unexpected/general error |
@@ -592,7 +592,6 @@ All Event Log entries use standardized EventIDs for monitoring and troubleshooti
 - ✅ Windows Event Log integration
 - ✅ Graceful error handling
 - ✅ Configurable encoding (Windows-1251, UTF-8, etc.)
-- ✅ Configurable update timeout
 - ✅ Single-server deployment model
 - ✅ Ready for SMB-based shared module (future iteration)
 

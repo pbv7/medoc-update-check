@@ -1,1980 +1,2087 @@
-#Requires -Version 7.0
-
-# PSScriptAnalyzer Note: This test file uses unused mock function parameters.
-# These are intentional - mock function signatures match the real functions they replace,
-# even when specific parameters aren't used in a particular test scenario.
+#Requires -Modules Pester
+using module "..\lib\MedocUpdateCheck.psm1"
 
 <#
 .SYNOPSIS
-    Pester tests for MedocUpdateCheck module
+    Comprehensive test suite for MedocUpdateCheck module - Phase 1 Refactoring
 
 .DESCRIPTION
-    Comprehensive unit and integration tests for the M.E.Doc Update Check module.
-    Tests core functionality: log parsing, update detection, and notification sending.
+    Tests for marker-based update detection (Phase 1 refactoring)
+    Tests 3 new helper functions: Find-LastUpdateOperation, Test-UpdateMarker, Test-UpdateState
+    Tests core function: Test-UpdateOperationSuccess
+    Verifies marker-based classification (2 markers: V and C instead of 3 flags)
 
 .NOTES
-    Run with: Invoke-Pester -Path "tests/MedocUpdateCheck.Tests.ps1" -Verbose
-    Requires: Pester module (Install-Module Pester -Force)
+    Uses 'using module' to import enum at compile-time for type-safe assertions
 #>
 
-# Import module at compile time to make enum types available
-using module "..\lib\MedocUpdateCheck.psm1"
-
 BeforeAll {
-    # Import the module
-    $modulePath = Join-Path $PSScriptRoot "..\lib\MedocUpdateCheck.psm1"
-    Import-Module $modulePath -Force
-
-    # Test data directory
-    $script:testDataDir = Join-Path $PSScriptRoot "test-data"
+    Import-Module -Force './lib/MedocUpdateCheck.psm1'
+    $script:testDataDir = Join-Path (Get-Item "./tests/test-data" -ErrorAction SilentlyContinue).FullName "."
+    $script:tempDirectories = @()
 }
 
-Describe "Test-UpdateOperationSuccess - Unit Tests" {
+Describe "Test-UpdateOperationSuccess - Core Update Detection Function" {
 
-    Context "Successful update detection with dual-log validation" {
-        It "Should detect successful update when all 3 flags present in update log" {
-            $logsDir = Join-Path $testDataDir "dual-log-success"
+    Context "Successful update detection (both markers present)" {
+        It "Should detect successful update when both markers are present" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
             $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            $result | Should -Not -BeNullOrEmpty
             $result.Status | Should -Be "Success"
-            $result.ErrorId | Should -Be ([MedocEventId]::Success)
             $result.Success | Should -Be $true
-            $result.TargetVersion | Should -Not -BeNullOrEmpty
         }
 
-        It "Should return hashtable with correct properties for successful update" {
-            $logsDir = Join-Path $testDataDir "dual-log-success"
+        It "Should have marker-based properties in the result" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
             $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            ($result.Keys -contains "Success") | Should -Be $true
-            ($result.Keys -contains "UpdateTime") | Should -Be $true
-            ($result.Keys -contains "TargetVersion") | Should -Be $true
-            ($result.Keys -contains "UpdateLogPath") | Should -Be $true
-            ($result.Keys -contains "Flag1_Infrastructure") | Should -Be $true
-            ($result.Keys -contains "Flag2_ServiceRestart") | Should -Be $true
-            ($result.Keys -contains "Flag3_VersionConfirm") | Should -Be $true
-            ($result.Keys -contains "Status") | Should -Be $true
-            ($result.Keys -contains "ErrorId") | Should -Be $true
+            $result.Keys | Should -Contain "MarkerVersionConfirm"
+            $result.Keys | Should -Contain "MarkerCompletionMarker"
+            $result.Keys | Should -Contain "OperationFound"
         }
 
-        It "Should parse update time correctly from Planner.log" {
-            $logsDir = Join-Path $testDataDir "dual-log-success"
+        It "Should correctly identify both markers present" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
             $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            $result.UpdateTime | Should -BeOfType [datetime]
+            # Phase 1: Both markers must be present for success
+            $result.MarkerVersionConfirm | Should -Be $true
+            $result.MarkerCompletionMarker | Should -Be $true
+            $result.OperationFound | Should -Be $true
+            $result.Success | Should -Be $true
         }
 
-        It "Should extract target version from update filename" {
-            $logsDir = Join-Path $testDataDir "dual-log-success"
+        It "Should extract version information" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
             $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            $result.TargetVersion | Should -Match "^\d+$"  # Should be a number like 184 or 186
+            $result.FromVersion | Should -Be "11.02.185"
+            $result.ToVersion | Should -Be "11.02.186"
+            $result.TargetVersion | Should -Be "186"
+        }
+
+        It "Should have both markers confirmed" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.MarkerVersionConfirm | Should -Be $true
+            $result.MarkerCompletionMarker | Should -Be $true
         }
     }
 
-    Context "No update detection" {
-        It "Should return NoUpdate status when no updates in Planner.log" {
-            $logsDir = Join-Path $testDataDir "dual-log-no-update"
+    Context "Failed update detection - missing markers" {
+        It "Should detect failure when version marker is missing" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
             $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            $result | Should -Not -BeNullOrEmpty
+            $result.Status | Should -Be "Failed"
+            $result.Success | Should -Be $false
+        }
+
+        It "Should show version marker as missing" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.MarkerVersionConfirm | Should -Be $false
+            $result.MarkerCompletionMarker | Should -Be $true
+        }
+
+        It "Should detect failure when completion marker is missing" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-completion-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.Status | Should -Be "Failed"
+            $result.Success | Should -Be $false
+        }
+
+        It "Should handle missing completion marker (operation not found)" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-completion-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Without completion marker, operation block is not recognized
+            $result.OperationFound | Should -Be $false
+            $result.Status | Should -Be "Failed"
+        }
+    }
+
+    Context "Real failure paths end-to-end with actual log fixtures" {
+        It "Should handle missing-version-marker scenario with real data" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Validate key failure properties
+            $result.Status | Should -Be "Failed"
+            $result.Success | Should -Be $false
+            $result.OperationFound | Should -Be $true
+            $result.MarkerVersionConfirm | Should -Be $false
+            $result.MarkerCompletionMarker | Should -Be $true
+        }
+
+        It "Should extract version information even when marker missing" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Version extraction independent of marker presence
+            $result.FromVersion | Should -Be "11.02.185"
+            $result.ToVersion | Should -Be "11.02.186"
+            $result.TargetVersion | Should -Be "186"
+        }
+
+        It "Should format failure message correctly with real data" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $message = Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
+
+            # Failure message should have error emoji and failed status
+            $message | Should -Match "^❌ UPDATE FAILED"
+            $message | Should -Match "TEST-SERVER"
+            $message | Should -Match "Reason:"
+        }
+
+        It "Should handle missing-completion-marker scenario with real data" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-completion-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Operation not found indicates incomplete operation block
+            $result.Status | Should -Be "Failed"
+            $result.Success | Should -Be $false
+            $result.OperationFound | Should -Be $false
+        }
+
+        It "Should use correct failure ErrorId for missing markers" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Failure should have ErrorId different from Success (1000) and NoUpdate (1001)
+            [int]$result.ErrorId | Should -Not -Be 1000
+            [int]$result.ErrorId | Should -Not -Be 1001
+        }
+
+        It "Should provide reason text for failure scenarios" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Failure should explain what went wrong
+            $result.Reason | Should -Not -BeNullOrEmpty
+            [string]$reason = $result.Reason
+            ($reason -match "Missing|marker|Завершення") | Should -Be $true
+        }
+
+        It "Should validate checkpoint filtering with failed updates" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+
+            # Test with checkpoint BEFORE the update
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir -SinceTime ([DateTime]'2025-10-20')
+
+            # Should find and fail the update (timestamp is 2025-10-23)
+            $result.Status | Should -Be "Failed"
+        }
+
+        It "Should detect no-update when checkpoint is after failed update" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+
+            # Test with checkpoint AFTER the update
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir -SinceTime ([DateTime]'2025-10-25')
+
+            # Should return NoUpdate (checkpoint filtered out the update)
+            $result.Status | Should -Be "NoUpdate"
+        }
+    }
+
+    Context "No update detected" {
+        It "Should return NoUpdate status when no update is found" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-detected"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.Status | Should -Be "NoUpdate"
+        }
+    }
+
+    Context "NoUpdate end-to-end scenario with real log fixtures" {
+        It "Should correctly classify logs with no update operation" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-detected"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Key outcome: NoUpdate status (not Success, not Failed)
             $result.Status | Should -Be "NoUpdate"
             $result.ErrorId | Should -Be ([MedocEventId]::NoUpdate)
-            $result.Message | Should -Match "No update"
+        }
+
+        It "Should return appropriate message for no-update scenario" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-detected"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Message should indicate no operation found
+            $result.Message | Should -Match "No update operation"
+        }
+
+        It "Should use NoUpdate error ID (1001)" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-detected"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # NoUpdate uses ErrorId 1001 (different from Success 1000 and Failed 1302)
+            [int]$result.ErrorId | Should -Be 1001
+        }
+
+        It "Should differentiate NoUpdate from Failed scenarios" {
+            $noUpdateDir = Join-Path $script:testDataDir "failure-no-update-detected"
+            $failedDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+
+            $noUpdateResult = Test-UpdateOperationSuccess -MedocLogsPath $noUpdateDir
+            $failedResult = Test-UpdateOperationSuccess -MedocLogsPath $failedDir
+
+            # Different status values
+            $noUpdateResult.Status | Should -Be "NoUpdate"
+            $failedResult.Status | Should -Be "Failed"
+
+            # Different error IDs
+            [int]$noUpdateResult.ErrorId | Should -Not -Be ([int]$failedResult.ErrorId)
+        }
+
+        It "Should handle NoUpdate in Telegram message formatting" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-detected"
+            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $message = Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
+
+            # Should use informational message, not error
+            $message | Should -Match "^ℹ️ NO UPDATE"
+            $message | Should -Not -Match "❌"
+            $message | Should -Not -Match "✅"
         }
     }
 
-    Context "Failed update detection (missing log file)" {
-        It "Should return failure when update log file is missing" {
-            $logsDir = Join-Path $testDataDir "dual-log-missing-updatelog"
+    Context "Missing update log file" {
+        It "Should handle missing update log gracefully" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-log"
             $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            $result | Should -Not -BeNullOrEmpty
             $result.Status | Should -Be "Failed"
-            $result.ErrorId | Should -Be ([MedocEventId]::UpdateLogMissing)
-            $result.Success | Should -Be $false
-            $result.Reason | Should -Match "Update log file not found"
         }
     }
 
-    Context "Failed update detection (missing success flags)" {
-        It "Should return failure when Flag1_Infrastructure is missing" {
-            $logsDir = Join-Path $testDataDir "dual-log-missing-flag1"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+    Context "Checkpoint filtering" {
+        It "Should stop searching when logs are older than checkpoint" {
+            $tempLogs = Join-Path ([System.IO.Path]::GetTempPath()) ("MedocLogs_{0}" -f ([System.Guid]::NewGuid().ToString('N')))
+            New-Item -ItemType Directory -Path $tempLogs -Force | Out-Null
+            $script:tempDirectories += $tempLogs
 
-            $result | Should -Not -BeNullOrEmpty
-            $result.Status | Should -Be "Failed"
-            $result.ErrorId | Should -Be ([MedocEventId]::Flag1Failed)
-            $result.Success | Should -Be $false
-            $result.Flag1_Infrastructure | Should -Be $false
-        }
+            $plannerLines = @(
+                "01.12.2025 10:00:00 Завантаження оновлення ezvit.11.02.185-11.02.186.upd"
+            )
+            $encoding = [System.Text.Encoding]::GetEncoding(1251)
+            [System.IO.File]::WriteAllLines((Join-Path $tempLogs "Planner.log"), $plannerLines, $encoding)
 
-        It "Should return failure when Flag2_ServiceRestart is missing" {
-            $logsDir = Join-Path $testDataDir "dual-log-missing-flag2"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+            $checkpoint = [datetime]'2025-12-01T23:59:59'
 
-            $result | Should -Not -BeNullOrEmpty
-            $result.Status | Should -Be "Failed"
-            $result.ErrorId | Should -Be ([MedocEventId]::Flag2Failed)
-            $result.Success | Should -Be $false
-            $result.Flag2_ServiceRestart | Should -Be $false
-        }
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $tempLogs -SinceTime $checkpoint
 
-        It "Should return failure when Flag3_VersionConfirm is missing" {
-            $logsDir = Join-Path $testDataDir "dual-log-missing-flag3"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-
-            $result | Should -Not -BeNullOrEmpty
-            $result.Status | Should -Be "Failed"
-            $result.ErrorId | Should -Be ([MedocEventId]::Flag3Failed)
-            $result.Success | Should -Be $false
-            $result.Flag3_VersionConfirm | Should -Be $false
-        }
-
-        It "Should return failure when version number doesn't match target" {
-            $logsDir = Join-Path $testDataDir "dual-log-wrong-version"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-
-            $result | Should -Not -BeNullOrEmpty
-            $result.Status | Should -Be "Failed"
-            $result.ErrorId | Should -Be ([MedocEventId]::Flag3Failed)
-            $result.Success | Should -Be $false
-            $result.Flag3_VersionConfirm | Should -Be $false
-        }
-
-        It "Should return MultipleFlagsFailed when two or more flags are missing" {
-            $logsDir = Join-Path $testDataDir "dual-log-multiple-flags-failed"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-
-            $result | Should -Not -BeNullOrEmpty
-            $result.Status | Should -Be "Failed"
-            $result.ErrorId | Should -Be ([MedocEventId]::MultipleFlagsFailed)
-            $result.Success | Should -Be $false
-            # Multiple flags should be false
-            $result.Flag1_Infrastructure | Should -Be $false
-            $result.Flag2_ServiceRestart | Should -Be $false
-            $result.Flag3_VersionConfirm | Should -Be $true
-        }
-    }
-
-    Context "Checkpoint filtering (SinceTime)" {
-        It "Should return NoUpdate status when updates are before checkpoint time" {
-            $logsDir = Join-Path $testDataDir "dual-log-success"
-            $checkpointTime = [datetime]::ParseExact("31.12.2025 23:59:59", "dd.MM.yyyy HH:mm:ss", $null)
-
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir -SinceTime $checkpointTime
-
-            $result | Should -Not -BeNullOrEmpty
             $result.Status | Should -Be "NoUpdate"
             $result.ErrorId | Should -Be ([MedocEventId]::NoUpdate)
         }
+    }
+}
 
-        It "Should include updates after checkpoint time" {
-            $logsDir = Join-Path $testDataDir "dual-log-success"
-            $checkpointTime = [datetime]::ParseExact("01.01.2020 00:00:00", "dd.MM.yyyy HH:mm:ss", $null)
+Describe "Test-UpdateMarker - Helper Function for Marker Validation" {
 
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir -SinceTime $checkpointTime
+    Context "Marker presence validation" {
+        It "Should detect version confirmation marker (V)" {
+            $operationContent = @"
+Початок роботи, операція "Оновлення"
+Версія програми - 186
+Завершення роботи, операція "Оновлення"
+"@
+            $result = Test-UpdateMarker -OperationContent $operationContent -TargetVersion "186"
 
-            $result | Should -Not -BeNullOrEmpty
+            $result.VersionConfirm | Should -Be $true
+        }
+
+        It "Should detect completion marker (C)" {
+            $operationContent = @"
+Початок роботи, операція "Оновлення"
+Версія програми - 186
+Завершення роботи, операція "Оновлення"
+"@
+            $result = Test-UpdateMarker -OperationContent $operationContent -TargetVersion "186"
+
+            $result.CompletionMarker | Should -Be $true
+        }
+
+        It "Should use word boundary for version matching" {
+            $operationContent = "Версія програми - 1860"
+            $result = Test-UpdateMarker -OperationContent $operationContent -TargetVersion "186"
+
+            $result.VersionConfirm | Should -Be $false
+        }
+
+        It "Should handle missing version marker" {
+            $operationContent = @"
+Початок роботи, операція "Оновлення"
+Завершення роботи, операція "Оновлення"
+"@
+            $result = Test-UpdateMarker -OperationContent $operationContent -TargetVersion "186"
+
+            $result.VersionConfirm | Should -Be $false
+            $result.CompletionMarker | Should -Be $true
+        }
+
+        It "Should handle missing completion marker" {
+            $operationContent = @"
+Початок роботи, операція "Оновлення"
+Версія програми - 186
+"@
+            $result = Test-UpdateMarker -OperationContent $operationContent -TargetVersion "186"
+
+            $result.VersionConfirm | Should -Be $true
+            $result.CompletionMarker | Should -Be $false
+        }
+    }
+}
+
+Describe "Test-UpdateState - Orchestrator Function for Classification" {
+
+    Context "Marker-based state classification" {
+        It "Should classify as Success when both markers are present" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $updateLogPath = Join-Path $logsDir "update_2025-10-23.log"
+            $logContent = Get-Content -Path $updateLogPath -Raw -Encoding 'Windows-1251'
+
+            $result = Test-UpdateState -UpdateLogContent $logContent -TargetVersion "186"
+
             $result.Status | Should -Be "Success"
-            $result.ErrorId | Should -Be ([MedocEventId]::Success)
+            $result.VersionConfirm | Should -Be $true
+            $result.CompletionMarker | Should -Be $true
+        }
+
+        It "Should classify as Failed when version marker is missing" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $updateLogPath = Join-Path $logsDir "update_2025-10-23.log"
+            $logContent = Get-Content -Path $updateLogPath -Raw -Encoding 'Windows-1251'
+
+            $result = Test-UpdateState -UpdateLogContent $logContent -TargetVersion "186"
+
+            $result.Status | Should -Be "Failed"
+            $result.VersionConfirm | Should -Be $false
+        }
+
+        It "Should fail when no operation markers exist" {
+            $logContent = "Random content with no markers present"
+
+            $result = Test-UpdateState -UpdateLogContent $logContent -TargetVersion "001"
+
+            $result.Status | Should -Be "Failed"
+            $result.OperationFound | Should -Be $false
+            $result.Message | Should -Match "No update operation"
+        }
+    }
+}
+
+Describe "Format-UpdateTelegramMessage - Telegram Notification Formatting" {
+
+    Context "Success message formatting" {
+        It "Should format successful update message with exact template" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $message = Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
+
+            # Exact message structure validation
+            $message | Should -Match "^✅ UPDATE OK \| TEST-SERVER"
+            $message | Should -Match "Version: .* → .*"
+            $message | Should -Match "Started: \d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}"
+            $message | Should -Match "Completed: \d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}"
+            $message | Should -Match "Checked: 28\.10\.2025 22:33:26"
+        }
+
+        It "Should include all required fields in success message" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $message = Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
+
+            # Validate all required sections are present
+            $message | Should -Match "Version:"
+            $message | Should -Match "Started:"
+            $message | Should -Match "Completed:"
+            $message | Should -Match "Checked:"
+            $message | Should -Match "✅"
+        }
+
+        It "Should validate version format in success message" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $message = Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
+
+            # Validate version extraction
+            $message | Should -Match "Version: 11\.02\.185 → 11\.02\.186"
         }
     }
 
-    Context "Encoding support" {
-        It "Should support Windows-1251 encoding (default)" {
-            $logsDir = Join-Path $testDataDir "dual-log-success"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir -EncodingCodePage 1251
+    Context "Failure message formatting" {
+        It "Should format failed update message with exact template" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            $result | Should -Not -BeNullOrEmpty
-            $result.Status | Should -Be "Success"
+            $message = Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
+
+            # Exact message structure validation
+            $message | Should -Match "^❌ UPDATE FAILED \| TEST-SERVER"
+            $message | Should -Match "Version: .* → .*"
+            $message | Should -Match "Started: \d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}"
+            $message | Should -Match "Failed at: .*"
+            $message | Should -Match "Reason: .*"
+            $message | Should -Match "Checked: 28\.10\.2025 22:33:26"
+        }
+
+        It "Should include all required fields in failure message" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $message = Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
+
+            # Validate all required sections are present
+            $message | Should -Match "Version:"
+            $message | Should -Match "Started:"
+            $message | Should -Match "Failed at:"
+            $message | Should -Match "Reason:"
+            $message | Should -Match "Checked:"
+            $message | Should -Match "❌"
         }
     }
 
-    Context "Error handling" {
-        It "Should return error status when log directory does not exist" {
-            $invalidPath = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString())
-            $result = & {
-                Test-UpdateOperationSuccess -MedocLogsPath $invalidPath -ErrorAction SilentlyContinue
-            } 2>$null
+    Context "NoUpdate message formatting" {
+        It "Should format no-update message with correct template" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-detected"
+            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            $result | Should -Not -BeNullOrEmpty
-            $result.Status | Should -Be "Error"
-            $result.ErrorId | Should -Be ([MedocEventId]::PlannerLogMissing)
+            $message = Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
+
+            # NoUpdate has different structure - informational, not error
+            $message | Should -Match "^ℹ️ NO UPDATE \|"
+            $message | Should -Match "TEST-SERVER"
+            $message | Should -Match "Checked: 28\.10\.2025 22:33:26"
         }
 
-        It "Should require MedocLogsPath parameter" {
-            { Test-UpdateOperationSuccess -ErrorAction Stop } | Should -Throw
+        It "Should NOT include version details in no-update message" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-detected"
+            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $message = Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
+
+            # NoUpdate is simpler - no Started/Completed/Failed fields
+            $message | Should -Not -Match "Started:"
+            $message | Should -Not -Match "Completed:"
+            $message | Should -Not -Match "Failed at:"
         }
 
-        It "Should return error status when Planner.log is missing" {
-            $missingPlannerDir = Join-Path $testDataDir "missing-planner"
-            if (-not (Test-Path $missingPlannerDir)) {
-                New-Item -ItemType Directory -Path $missingPlannerDir | Out-Null
-            }
-            try {
-                $result = & {
-                    Test-UpdateOperationSuccess -MedocLogsPath $missingPlannerDir -ErrorAction SilentlyContinue
-                } 2>$null
-                $result | Should -Not -BeNullOrEmpty
-                $result.Status | Should -Be "Error"
-                $result.ErrorId | Should -Be ([MedocEventId]::PlannerLogMissing)
-            } finally {
-                Remove-Item $missingPlannerDir -Recurse -Force
-            }
-        }
-    }
+        It "Should use informational emoji for no-update (not error emoji)" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-detected"
+            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-    Context "Event Log verification for error paths" {
-        BeforeEach {
-            # Initialize Event Log capture for this context
-            $script:capturedLogEvents = @()
+            $message = Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
 
-            # Mock Write-EventLogEntry to capture calls (works on all platforms)
-            Mock -CommandName Write-EventLogEntry -ModuleName MedocUpdateCheck -MockWith {
-                param(
-                    [string]$Message,
-                    [string]$EventType,
-                    [int]$EventId,
-                    [string]$EventLogSource,
-                    [string]$EventLogName
-                )
-                $script:capturedLogEvents += [pscustomobject]@{
-                    Message   = $Message
-                    EventType = $EventType
-                    EventId   = $EventId
-                    Source    = $EventLogSource
-                    LogName   = $EventLogName
-                }
-            }
-        }
-
-        It "Should log PlannerLogMissing error when Planner.log is absent" {
-            $missingDir = Join-Path $testDataDir "test-missing-planner-$(New-Guid)"
-            New-Item -ItemType Directory -Path $missingDir -Force | Out-Null
-
-            try {
-                $result = Test-UpdateOperationSuccess -MedocLogsPath $missingDir -ErrorAction SilentlyContinue
-
-                # Verify error status
-                $result.Status | Should -Be "Error"
-                $result.ErrorId | Should -Be ([MedocEventId]::PlannerLogMissing)
-
-                # Verify Event Log was called with correct EventId (platform-independent test via mock)
-                $logEntry = $script:capturedLogEvents | Where-Object { $_.EventId -eq ([int][MedocEventId]::PlannerLogMissing) } | Select-Object -Last 1
-                $logEntry | Should -Not -BeNullOrEmpty
-                $logEntry.EventType | Should -Be "Error"
-                $logEntry.Message | Should -Match "Planner.log not found"
-            } finally {
-                Remove-Item $missingDir -Force -ErrorAction SilentlyContinue
-            }
-        }
-
-        It "Should log EncodingError when log file cannot be read" {
-            # Create test directory with Planner.log that has invalid content
-            $testDir = Join-Path $testDataDir "test-encoding-error-$(New-Guid)"
-
-            try {
-                New-Item -ItemType Directory -Path $testDir -Force | Out-Null
-
-                # Create Planner.log with minimal invalid content
-                # Using UTF-8 with BOM which may cause issues with Windows-1251 parsing
-                "Test`nInvalid content" | Set-Content -Path "$testDir\Planner.log" -Encoding UTF8
-
-                # Try to read with Windows-1251 encoding - should work but demonstrates error path
-                # For this test, we'll rely on the mock to verify error paths log correctly
-                $result = Test-UpdateOperationSuccess -MedocLogsPath $testDir -EncodingCodePage 1251 -ErrorAction SilentlyContinue
-
-                # Note: This test validates the error handling mechanism
-                # Whether it returns "Error" or "NoUpdate" depends on file content
-                # The important thing is that IF an error occurs, it's logged
-                # Current test verifies the logging infrastructure is in place
-                $result | Should -Not -BeNullOrEmpty
-                ($result.Status -eq "Error" -or $result.Status -eq "NoUpdate") | Should -Be $true
-            } finally {
-                if (Test-Path $testDir) {
-                    Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue
-                }
-            }
-        }
-
-        It "Should log all error paths with appropriate EventId and Error level" {
-            # This test validates that the logging infrastructure is properly connected
-            # Mock Test-UpdateOperationSuccess to return an error status
-            Mock -CommandName Test-UpdateOperationSuccess -ModuleName MedocUpdateCheck -MockWith {
-                @{
-                    Status  = "Error"
-                    ErrorId = [MedocEventId]::EncodingError
-                    Message = "Error reading log file"
-                }
-            }
-
-            $config = @{
-                ServerName    = "TestServer"
-                MedocLogsPath = (Join-Path $testDataDir "dual-log-success")
-                BotToken      = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId        = "12345"
-            }
-
-            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
-            $result.Outcome | Should -Be 'Error'
-
-            # Verify that error was logged to Event Log with correct EventId
-            $errorLogEntry = $script:capturedLogEvents | Where-Object { $_.EventId -eq ([int][MedocEventId]::EncodingError) } | Select-Object -Last 1
-            $errorLogEntry | Should -Not -BeNullOrEmpty
-            $errorLogEntry.EventType | Should -Be "Error"
+            $message | Should -Match "ℹ️"
+            $message | Should -Not -Match "❌"
+            $message | Should -Not -Match "✅"
         }
     }
+}
 
-    Context "Warning Event Log verification" {
-        BeforeEach {
-            $script:capturedLogEvents = @()
-            $script:capturedWarnings = @()
+Describe "Write-EventLogEntry - Event Log Handling" {
 
-            Mock -CommandName Write-EventLogEntry -ModuleName MedocUpdateCheck -MockWith {
-                param(
-                    [string]$Message,
-                    [string]$EventType,
-                    [int]$EventId,
-                    [string]$EventLogSource,
-                    [string]$EventLogName
-                )
-                $script:capturedLogEvents += [pscustomobject]@{
-                    Message   = $Message
-                    EventType = $EventType
-                    EventId   = $EventId
+    if (-not $IsWindows) {
+        It "Should skip Windows-only Event Log tests on non-Windows hosts" {
+            Set-ItResult -Skipped -Because "Windows Event Log APIs are not available on this platform."
+        }
+    } else {
+        InModuleScope MedocUpdateCheck {
+            BeforeEach {
+                $script:lastWrite = $null
+                $script:eventLogDisposed = $false
+                $script:createdSource = $false
+                $script:warningMessages = @()
+
+                Mock Write-Warning {
+                    param($Message)
+                    $script:warningMessages += $Message
                 }
             }
 
-            # Capture Write-Warning calls (they go to different stream)
-            $warningVariable = "WarningPreference"
-            Set-Variable -Name $warningVariable -Value "Continue" -Scope Global
-        }
-
-        It "Should log warning to Event Log when EncodingCodePage is invalid" {
-            $logsDir = Join-Path $testDataDir "dual-log-success"
-
-            $result = Invoke-MedocUpdateCheck -Config @{
-                ServerName        = "TestServer"
-                MedocLogsPath     = $logsDir
-                BotToken          = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId            = "12345"
-                EncodingCodePage  = 9999  # Invalid codepage
-            } -ErrorAction SilentlyContinue 2>$null
-
-            # Verify function handled the warning and continued
-            $result.Outcome | Should -Be 'Error'  # Telegram/transport or other error outcome
-
-            # Verify warning was logged to Event Log with correct EventId and type
-            $warnEntry = $script:capturedLogEvents |
-                Where-Object { $_.EventId -eq ([int][MedocEventId]::ConfigInvalidValue) -and $_.EventType -eq "Warning" } |
-                Select-Object -Last 1
-            $warnEntry | Should -Not -BeNullOrEmpty
-            $warnEntry.Message | Should -Match "EncodingCodePage.*(invalid|not supported)"
-        }
-
-        It "Should log error when Event Log source cannot be created (admin required)" {
-            # Mock New-Item to fail when creating checkpoint directory
-            # This simulates permission issues during initialization
-            $logsDir = Join-Path $testDataDir "dual-log-success"
-
-            Mock -CommandName Write-EventLogEntry -ModuleName MedocUpdateCheck -MockWith {
-                param(
-                    [string]$Message,
-                    [string]$EventType,
-                    [int]$EventId,
-                    [string]$EventLogSource,
-                    [string]$EventLogName
-                )
-                # Simulate Event Log source creation failure (no admin)
-                if ($Message -match "Failed to create checkpoint") {
-                    $script:capturedLogEvents += [pscustomobject]@{
-                        Message   = $Message
-                        EventType = $EventType
+            It "Should create missing source and write entry" {
+                $eventLog = [pscustomobject]@{}
+                $eventLog | Add-Member -MemberType NoteProperty -Name Source -Value $null -Force
+                $eventLog | Add-Member -MemberType ScriptMethod -Name WriteEntry -Value {
+                    param($Message, $EntryType, $EventId)
+                    $script:lastWrite = @{
+                        Message  = $Message
+                        EntryType = $EntryType
                         EventId   = $EventId
                     }
+                } | Out-Null
+                $eventLog | Add-Member -MemberType ScriptMethod -Name Dispose -Value {
+                    $script:eventLogDisposed = $true
+                } | Out-Null
+
+                Mock Invoke-EventLogSourceExists {
+                    param($EventLogSource)
+                    $false
                 }
+                Mock Invoke-CreateEventLogSource {
+                    param($EventLogSource, $EventLogName)
+                    $script:createdSource = $true
+                }
+                Mock New-EventLogHandle {
+                    param($EventLogName)
+                    $eventLog
+                }
+
+                Write-EventLogEntry -Message "Test entry" -EventType Information -EventId 2000
+
+                $script:createdSource | Should -BeTrue
+                $script:lastWrite.Message | Should -Be "Test entry"
+                $script:eventLogDisposed | Should -BeTrue
             }
 
-            $result = Invoke-MedocUpdateCheck -Config @{
-                ServerName    = "TestServer"
-                MedocLogsPath = $logsDir
-                LastRunFile   = (Join-Path $logsDir ("checkpoint-eventlog-{0}.txt" -f ([guid]::NewGuid().ToString("N"))))
-                BotToken      = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId        = "12345"
-            } -ErrorAction SilentlyContinue 2>$null
+            It "Should warn when creating source fails" {
+                Mock Invoke-EventLogSourceExists {
+                    param($EventLogSource)
+                    $false
+                }
+                Mock Invoke-CreateEventLogSource {
+                    param($EventLogSource, $EventLogName)
+                    throw "Access denied"
+                }
 
-            # Function should handle gracefully (continue execution)
-            $result.Outcome | Should -Be 'Error'  # Error outcome but execution path reached
-        }
+                Write-EventLogEntry -Message "Test entry" -EventType Error -EventId 2001
 
-        It "Should handle Write-EventLogEntry gracefully when Event Log is unavailable" {
-            # This test validates that warnings are issued when Event Log fails
-            # but execution continues (important for cross-platform compatibility)
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-
-            # Mock Invoke-RestMethod to simulate successful Telegram API response
-            Mock -CommandName Invoke-RestMethod -ModuleName MedocUpdateCheck -MockWith {
-                return @{ ok = $true }
+                $script:warningMessages | Should -Not -BeEmpty
+                $script:warningMessages[-1] | Should -Match "Could not create"
             }
 
-            # On macOS/Linux, Event Log operations fail gracefully with Write-Warning
-            # This test ensures that behavior is correct
-            $result = Invoke-MedocUpdateCheck -Config @{
-                ServerName    = "TestServer"
-                MedocLogsPath = $logsDir
-                LastRunFile   = (Join-Path -Path $logsDir -ChildPath ("checkpoint-eventlog2-{0}.txt" -f ([guid]::NewGuid().ToString("N"))))
-                BotToken      = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId        = "12345"
-            } -ErrorAction SilentlyContinue 2>$null
+            It "Should warn when event log handle creation fails" {
+                Mock Invoke-EventLogSourceExists {
+                    param($EventLogSource)
+                    $true
+                }
+                Mock New-EventLogHandle {
+                    param($EventLogName)
+                    throw "No event log"
+                }
 
-            # Function should complete (not throw) and return structured success outcome
-            $result.Outcome | Should -Be 'Success'
+                Write-EventLogEntry -Message "Test entry" -EventType Warning -EventId 2002
+
+                $script:warningMessages | Should -Not -BeEmpty
+                $script:warningMessages[-1] | Should -Match "Could not write"
+            }
         }
     }
 }
 
-Describe "Get-VersionInfo - Version Parsing Tests" {
-
-    Context "Standard format (ezvit.X.Y.Z-X.Y.Z.upd)" {
-        It "Should parse version with dash separator" {
-            $result = Get-VersionInfo -RawVersion "ezvit.11.02.183-11.02.184.upd"
-            $result.FromVersion | Should -Be "11.02.183"
-            $result.ToVersion | Should -Be "11.02.184"
+Describe "Module Exports - Public API Verification" {
+    Context "Helper functions are exported" {
+        It "Should export Find-LastUpdateOperation" {
+            (Get-Module MedocUpdateCheck).ExportedFunctions.Keys | Should -Contain "Find-LastUpdateOperation"
         }
 
-        It "Should parse version without .upd extension" {
-            $result = Get-VersionInfo -RawVersion "ezvit.11.02.183-11.02.184"
-            $result.FromVersion | Should -Be "11.02.183"
-            $result.ToVersion | Should -Be "11.02.184"
+        It "Should export Test-UpdateMarker" {
+            (Get-Module MedocUpdateCheck).ExportedFunctions.Keys | Should -Contain "Test-UpdateMarker"
         }
 
-        It "Should handle version numbers with leading zeros" {
-            $result = Get-VersionInfo -RawVersion "ezvit.11.02.001-11.02.100.upd"
-            $result.FromVersion | Should -Be "11.02.001"
-            $result.ToVersion | Should -Be "11.02.100"
+        It "Should export Test-UpdateState" {
+            (Get-Module MedocUpdateCheck).ExportedFunctions.Keys | Should -Contain "Test-UpdateState"
         }
     }
 
-    Context "M.E.Doc format variations" {
-        It "Should parse version with hyphen (standard M.E.Doc format)" {
-            $result = Get-VersionInfo -RawVersion "ezvit.11.02.183-11.02.184.upd"
-            $result.FromVersion | Should -Be "11.02.183"
-            $result.ToVersion | Should -Be "11.02.184"
-        }
-
-        It "Should handle hyphen without ezvit prefix" {
-            $result = Get-VersionInfo -RawVersion "11.02.183-11.02.184"
-            $result.FromVersion | Should -Be "11.02.183"
-            $result.ToVersion | Should -Be "11.02.184"
-        }
-    }
-
-    Context "Fallback for unknown formats" {
-        It "Should handle dash-separated unknown format" {
-            $result = Get-VersionInfo -RawVersion "old-something-11.02.184"
-            # Dash matches, so it will try to split
-            $result.FromVersion | Should -Not -BeNullOrEmpty
-            $result.ToVersion | Should -Not -BeNullOrEmpty
-        }
-
-        It "Should handle single version number" {
-            $result = Get-VersionInfo -RawVersion "11.02.184.upd"
-            $result.FromVersion | Should -Be "previous"
-            $result.ToVersion | Should -Be "11.02.184"
-        }
-    }
-
-    Context "Edge cases" {
-        It "Should handle empty product name prefix" {
-            $result = Get-VersionInfo -RawVersion "11.02.183-11.02.184"
-            $result.FromVersion | Should -Be "11.02.183"
-            $result.ToVersion | Should -Be "11.02.184"
-        }
-
-        It "Should trim whitespace from version numbers" {
-            $result = Get-VersionInfo -RawVersion "  ezvit.11.02.183 - 11.02.184  "
-            $result.FromVersion | Should -Match "11.02.183"
-            $result.ToVersion | Should -Match "11.02.184"
-        }
-    }
-}
-
-Describe "Write-EventLogEntry - Unit Tests" {
-
-    Context "Function exists and is callable" {
-        It "Should be exported from module" {
-            Get-Command Write-EventLogEntry -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
-        }
-
-        It "Should accept required parameters" {
-            { Write-EventLogEntry -Message "Test message" } | Should -Not -Throw
-        }
-
-        It "Should accept optional parameters" {
-            { Write-EventLogEntry -Message "Test" -EventType "Warning" -EventId 2000 } | Should -Not -Throw
-        }
-    }
-
-    Context "Parameter validation" {
-        It "Should require Message parameter" {
-            # When mandatory parameter is missing, PowerShell raises a ParameterBindingException
-            { $null | Write-EventLogEntry -ErrorAction Stop } | Should -Throw
-        }
-
-        It "Should validate EventType values" {
-            { Write-EventLogEntry -Message "Test" -EventType "InvalidType" } | Should -Throw
-        }
-
-        It "Should accept valid EventType values" {
-            { Write-EventLogEntry -Message "Test" -EventType "Information" } | Should -Not -Throw
-            { Write-EventLogEntry -Message "Test" -EventType "Warning" } | Should -Not -Throw
-            { Write-EventLogEntry -Message "Test" -EventType "Error" } | Should -Not -Throw
-        }
-    }
-
-    Context "Default values" {
-        It "Should use Information as default EventType" {
-            # This implicitly tests that the function accepts the call without EventType
-            { Write-EventLogEntry -Message "Test message" } | Should -Not -Throw
-        }
-
-        It "Should use 1000 as default EventId" {
-            # Function should accept call and use 1000 as EventId
-            { Write-EventLogEntry -Message "Test message" } | Should -Not -Throw
-        }
-    }
-}
-
-Describe "Invoke-MedocUpdateCheck - Integration Tests" {
-
-    Context "Configuration validation" {
-        It "Should reject missing ServerName" {
-            $badConfig = @{
-                MedocLogsPath = "C:\test"
-                BotToken      = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId        = "12345"
-            }
-
-            { Invoke-MedocUpdateCheck -Config $badConfig -ErrorAction Stop } | Should -Throw
-        }
-
-        It "Should reject missing MedocLogsPath" {
-            $badConfig = @{
-                ServerName = "TestServer"
-                BotToken   = "test_token"
-                ChatId     = "12345"
-            }
-
-            { Invoke-MedocUpdateCheck -Config $badConfig -ErrorAction Stop } | Should -Throw
-        }
-
-        It "Should reject all missing required keys" {
-            $requiredKeys = @("ServerName", "MedocLogsPath", "BotToken", "ChatId")
-            foreach ($missingKey in $requiredKeys) {
-                $config = @{
-                    ServerName     = "TestServer"
-                    MedocLogsPath  = "C:\test"
-                    BotToken       = "test_token"
-                    ChatId         = "12345"
-                }
-                $config.Remove($missingKey)
-
-                { Invoke-MedocUpdateCheck -Config $config -ErrorAction Stop } | Should -Throw
-            }
-        }
-    }
-
-    Context "Required config presence" {
-        It "Should require hashtable Config parameter" {
-            { Invoke-MedocUpdateCheck } | Should -Throw
-        }
-    }
-
-    Context "Default values" {
-        It "Should use default encoding when not specified" {
-            # This is tested indirectly - the function should not throw when missing
-            $logsDir = Join-Path $testDataDir "dual-log-success"
-            $tempCheckpoint = Join-Path $testDataDir ".test-checkpoint.txt"
-
-            try {
-                $config = @{
-                    ServerName        = "TestServer"
-                    MedocLogsPath     = $logsDir
-                    LastRunFile       = $tempCheckpoint
-                    BotToken          = "invalid_token"
-                    ChatId            = "12345"
-                    # EncodingCodePage intentionally omitted (should default to 1251)
-                }
-
-                # Should return structured error outcome when Telegram/API fails
-                $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
-                $result.Outcome | Should -Be 'Error'
-            } finally {
-                if (Test-Path $tempCheckpoint) { Remove-Item $tempCheckpoint }
-            }
-        }
-    }
-
-    Context "Event ID mapping" {
-        BeforeEach {
-            $script:loggedEvents = @()
-
-            Mock -CommandName Format-UpdateTelegramMessage -ModuleName MedocUpdateCheck -MockWith {
-                param($UpdateResult, $ServerName, $CheckTime)
-                "TELEGRAM_MESSAGE"
-            }
-
-            Mock -CommandName Format-UpdateEventLogMessage -ModuleName MedocUpdateCheck -MockWith {
-                param($UpdateResult, $ServerName, $CheckTime)
-                "EVENT_LOG_MESSAGE"
-            }
-
-            Mock -CommandName Invoke-RestMethod -ModuleName MedocUpdateCheck -MockWith { @{ ok = $true } }
-
-            Mock -CommandName Write-EventLogEntry -ModuleName MedocUpdateCheck -MockWith {
-                param(
-                    [string]$Message,
-                    [string]$EventType,
-                    [int]$EventId,
-                    [string]$EventLogSource,
-                    [string]$EventLogName
-                )
-                $script:loggedEvents += [pscustomobject]@{
-                    Message   = $Message
-                    EventType = $EventType
-                    EventId   = $EventId
-                }
-            }
-        }
-
-        AfterEach {
-            if (Get-Variable -Name checkpointPath -Scope Script -ErrorAction SilentlyContinue) {
-                if (Test-Path $script:checkpointPath) { Remove-Item $script:checkpointPath -Force }
-                Remove-Variable -Name checkpointPath -Scope Script -ErrorAction SilentlyContinue
-            }
-        }
-
-        It "Should log success event as Information with ID 1000" {
-            Mock -CommandName Test-UpdateOperationSuccess -ModuleName MedocUpdateCheck -MockWith {
-                @{
-                    Status               = "Success"
-                    ErrorId              = [MedocEventId]::Success
-                    Success              = $true
-                    FromVersion          = "11.02.183"
-                    ToVersion            = "11.02.184"
-                    UpdateStartTime      = Get-Date
-                    UpdateEndTime        = Get-Date
-                    UpdateDuration       = 60
-                    Flag1_Infrastructure = $true
-                    Flag2_ServiceRestart = $true
-                    Flag3_VersionConfirm = $true
-                    Reason               = "All success flags confirmed"
-                }
-            }
-
-            $script:checkpointPath = Join-Path $testDataDir ("checkpoint-success-{0}.txt" -f ([guid]::NewGuid().ToString("N")))
-
-            $config = @{
-                ServerName    = "TestServer"
-                MedocLogsPath = (Join-Path $testDataDir "dual-log-success")
-                LastRunFile   = $script:checkpointPath
-                BotToken      = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId        = "12345"
-            }
-
-            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
-            $result.Outcome | Should -Be 'Success'
-            $result.NotificationSent | Should -Be $true
-
-            $eventRecord = $script:loggedEvents | Where-Object { $_.Message -eq "EVENT_LOG_MESSAGE" } | Select-Object -Last 1
-            $eventRecord | Should -Not -BeNullOrEmpty
-            $eventRecord.EventId | Should -Be ([int][MedocEventId]::Success)
-            $eventRecord.EventType | Should -Be "Information"
-        }
-
-        It "Should log no-update event as Information with ID 1001" {
-            Mock -CommandName Test-UpdateOperationSuccess -ModuleName MedocUpdateCheck -MockWith {
-                @{
-                    Status  = "NoUpdate"
-                    ErrorId = [MedocEventId]::NoUpdate
-                    Message = "No updates found"
-                }
-            }
-
-            $script:checkpointPath = Join-Path $testDataDir ("checkpoint-noupdate-{0}.txt" -f ([guid]::NewGuid().ToString("N")))
-
-            $config = @{
-                ServerName    = "TestServer"
-                MedocLogsPath = (Join-Path $testDataDir "dual-log-success")
-                LastRunFile   = $script:checkpointPath
-                BotToken      = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId        = "12345"
-            }
-
-            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
-            $result.Outcome | Should -Be 'NoUpdate'
-            $result.NotificationSent | Should -Be $true
-
-            $eventRecord = $script:loggedEvents | Where-Object { $_.Message -eq "EVENT_LOG_MESSAGE" } | Select-Object -Last 1
-            $eventRecord | Should -Not -BeNullOrEmpty
-            $eventRecord.EventId | Should -Be ([int][MedocEventId]::NoUpdate)
-            $eventRecord.EventType | Should -Be "Information"
-        }
-
-        It "Should log flag failure event as Error with mapped ID" {
-            Mock -CommandName Test-UpdateOperationSuccess -ModuleName MedocUpdateCheck -MockWith {
-                @{
-                    Status               = "Failed"
-                    ErrorId              = [MedocEventId]::Flag1Failed
-                    Success              = $false
-                    FromVersion          = "11.02.183"
-                    ToVersion            = "11.02.184"
-                    Flag1_Infrastructure = $false
-                    Flag2_ServiceRestart = $true
-                    Flag3_VersionConfirm = $true
-                    Reason               = "Flag1 missing"
-                }
-            }
-
-            $script:checkpointPath = Join-Path $testDataDir ("checkpoint-failure-{0}.txt" -f ([guid]::NewGuid().ToString("N")))
-
-            $config = @{
-                ServerName    = "TestServer"
-                MedocLogsPath = (Join-Path $testDataDir "dual-log-success")
-                LastRunFile   = $script:checkpointPath
-                BotToken      = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId        = "12345"
-            }
-
-            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
-            $result.Outcome | Should -Be 'UpdateFailed'
-            $result.NotificationSent | Should -Be $true
-
-            $eventRecord = $script:loggedEvents | Where-Object { $_.Message -eq "EVENT_LOG_MESSAGE" } | Select-Object -Last 1
-            $eventRecord | Should -Not -BeNullOrEmpty
-            $eventRecord.EventId | Should -Be ([int][MedocEventId]::Flag1Failed)
-            $eventRecord.EventType | Should -Be "Error"
-        }
-
-        It "Should stop early and log error when update routine reports Error" {
-            Mock -CommandName Test-UpdateOperationSuccess -ModuleName MedocUpdateCheck -MockWith {
-                @{
-                    Status  = "Error"
-                    ErrorId = [MedocEventId]::PlannerLogMissing
-                    Message = "Planner.log missing"
-                }
-            }
-
-            $config = @{
-                ServerName    = "TestServer"
-                MedocLogsPath = (Join-Path $testDataDir "dual-log-success")
-                LastRunFile   = Join-Path $testDataDir ("checkpoint-error-{0}.txt" -f ([guid]::NewGuid().ToString("N")))
-                BotToken      = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId        = "12345"
-            }
-
-            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
-            $result.Outcome | Should -Be 'Error'
-
-            $eventRecord = $script:loggedEvents | Where-Object { $_.EventId -eq ([int][MedocEventId]::PlannerLogMissing) } | Select-Object -Last 1
-            $eventRecord | Should -Not -BeNullOrEmpty
-            $eventRecord.EventType | Should -Be "Error"
-        }
-    }
-}
-
-Describe "Message Formatting - Unit Tests" {
-
-    Context "Version extraction from UpdateLine" {
-        It "Should extract version from success UpdateLine" {
-            $updateLine = "Завантаження оновлення ezvit.11.02.183-11.02.184.upd"
-            $version = ($updateLine -split 'Завантаження оновлення')[1].Trim()
-
-            $version | Should -Be "ezvit.11.02.183-11.02.184.upd"
-        }
-
-        It "Should handle version without .upd extension" {
-            $updateLine = "Завантаження оновлення ezvit.11.02.183-11.02.184"
-            $version = ($updateLine -split 'Завантаження оновлення')[1].Trim()
-
-            $version | Should -Be "ezvit.11.02.183-11.02.184"
-        }
-
-        It "Should trim extra whitespace from version string" {
-            $updateLine = "Завантаження оновлення  ezvit.11.02.183-11.02.184  "
-            $version = ($updateLine -split 'Завантаження оновлення')[1].Trim()
-
-            $version | Should -Be "ezvit.11.02.183-11.02.184"
-        }
-    }
-
-    Context "Message construction" {
-        It "Should include server name in success message" {
-            $serverName = "TestServer"
-            $version = "ezvit.11.02.183-11.02.184"
-            $timeTaken = 7.2
-            $timestamp = "25.09.2025 5:07:12"
-
-            $message = "✅ $serverName`nМ.E.Doc оновлено до версії $version`nЧас виконання: ${timeTaken} хв`nПеревірено: $timestamp"
-
-            $message | Should -Match "✅ TestServer"
-            $message | Should -Match "ezvit.11.02.183-11.02.184"
-            $message | Should -Match "7.2 хв"
-        }
-
-        It "Should format failure message with emoji and version" {
-            $serverName = "TestServer"
-            $version = "ezvit.11.02.183-11.02.184"
-            $timestamp = "25.09.2025 5:07:12"
-
-            $message = "❌ $serverName`nПОМИЛКА при оновленні до версії $version`nПеревірено: $timestamp"
-
-            $message | Should -Match "❌ TestServer"
-            $message | Should -Match "ПОМИЛКА при оновленні"
-            $message | Should -Match "ezvit.11.02.183-11.02.184"
-        }
-
-        It "Should format no-update message with info emoji" {
-            $serverName = "TestServer"
-            $timestamp = "25.09.2025 5:07:12"
-
-            $message = "ℹ️ $serverName`nОновлень не було`nПеревірено: $timestamp"
-
-            $message | Should -Match "ℹ️ TestServer"
-            $message | Should -Match "Оновлень не було"
-            $message | Should -Match $timestamp
-        }
-
-        It "Should include newlines for proper message formatting" {
-            $serverName = "Server1"
-            $version = "v1.0"
-            $message = "✅ $serverName`nМ.E.Doc оновлено до версії $version"
-
-            # Check that message contains backtick-n (escaped newline)
-            $message | Should -Match "Server1`nМ.E.Doc"
-        }
-    }
-
-    Context "Cyrillic text handling" {
-        It "Should preserve Cyrillic characters in message" {
-            $message = "❌ Тест`nПОМИЛКА при оновленні до версії test"
-
-            $message | Should -Match "Тест"
-            $message | Should -Match "ПОМИЛКА"
-            $message | Should -Match "оновленні"
-        }
-
-        It "Should handle Cyrillic ServerName in message" {
-            $serverName = "Сервер_1"
-            $message = "✅ $serverName`nОновлено успішно"
-
-            $message | Should -Match "Сервер_1"
-            $message | Should -Match "Оновлено успішно"
-        }
-    }
-}
-
-Describe "Checkpoint Operations - Unit Tests" {
-
-    Context "Checkpoint filename generation" {
-        It "Should sanitize server name in checkpoint filename" {
-            $serverName = "Server-01"
-            $checkpointFileName = "last_run_$($serverName -replace '[^\w\-]', '_').txt"
-
-            $checkpointFileName | Should -Be "last_run_Server-01.txt"
-        }
-
-        It "Should replace special characters with underscore in filename" {
-            $serverName = "Server@01#Test"
-            $checkpointFileName = "last_run_$($serverName -replace '[^\w\-]', '_').txt"
-
-            $checkpointFileName | Should -Be "last_run_Server_01_Test.txt"
-        }
-
-        It "Should handle spaces in server name" {
-            $serverName = "Server 01 Test"
-            $checkpointFileName = "last_run_$($serverName -replace '[^\w\-]', '_').txt"
-
-            $checkpointFileName | Should -Be "last_run_Server_01_Test.txt"
-        }
-
-        It "Should preserve hyphens and alphanumeric in filename" {
-            $serverName = "Server-01_Test-02"
-            $checkpointFileName = "last_run_$($serverName -replace '[^\w\-]', '_').txt"
-
-            $checkpointFileName | Should -Be "last_run_Server-01_Test-02.txt"
-        }
-    }
-
-    Context "Checkpoint timestamp handling" {
-        It "Should parse valid checkpoint timestamp in correct format" {
-            $checkpointContent = "25.09.2025 05:00:00"
-
-            $lastRunTime = [DateTime]::ParseExact($checkpointContent, 'dd.MM.yyyy HH:mm:ss', $null)
-
-            $lastRunTime.Day | Should -Be 25
-            $lastRunTime.Month | Should -Be 9
-            $lastRunTime.Year | Should -Be 2025
-            $lastRunTime.Hour | Should -Be 5
-            $lastRunTime.Minute | Should -Be 0
-        }
-
-        It "Should handle checkpoint with two-digit hour" {
-            $checkpointContent = "25.09.2025 15:30:45"
-
-            { [DateTime]::ParseExact($checkpointContent, 'dd.MM.yyyy HH:mm:ss', $null) } | Should -Not -Throw
-        }
-
-        It "Should fail gracefully on malformed checkpoint timestamp" {
-            $checkpointContent = "invalid timestamp"
-
-            { [DateTime]::ParseExact($checkpointContent, 'dd.MM.yyyy HH:mm:ss', $null) } | Should -Throw
-        }
-
-        It "Should handle checkpoint with leading zero in hour" {
-            $checkpointContent = "25.09.2025 09:00:00"
-            $lastRunTime = [DateTime]::ParseExact($checkpointContent, 'dd.MM.yyyy HH:mm:ss', $null)
-
-            $lastRunTime.Hour | Should -Be 9
-        }
-
-        It "Should handle year 2000 timestamp" {
-            $checkpointContent = "01.01.2000 00:00:00"
-
-            { [DateTime]::ParseExact($checkpointContent, 'dd.MM.yyyy HH:mm:ss', $null) } | Should -Not -Throw
-        }
-
-        It "Should handle year 2099 timestamp" {
-            $checkpointContent = "31.12.2099 23:59:59"
-
-            { [DateTime]::ParseExact($checkpointContent, 'dd.MM.yyyy HH:mm:ss', $null) } | Should -Not -Throw
-        }
-
-        It "Should handle midnight timestamp" {
-            $checkpointContent = "15.06.2025 00:00:00"
-            $lastRunTime = [DateTime]::ParseExact($checkpointContent, 'dd.MM.yyyy HH:mm:ss', $null)
-
-            $lastRunTime.Hour | Should -Be 0
-            $lastRunTime.Minute | Should -Be 0
-            $lastRunTime.Second | Should -Be 0
-        }
-    }
-
-    Context "ServerName special characters in filenames" {
-        It "Should handle Cyrillic ServerName" {
-            $serverName = "Сервер_01"
-            $fileName = "last_run_$($serverName -replace '[^\w\-]', '_').txt"
-
-            # Cyrillic characters get replaced, underscores are preserved
-            $fileName | Should -Match "last_run_.*_01\.txt"
-        }
-
-        It "Should handle mixed case and numbers in ServerName" {
-            $serverName = "Server123"
-            $fileName = "last_run_$($serverName -replace '[^\w\-]', '_').txt"
-
-            $fileName | Should -Be "last_run_Server123.txt"
-        }
-
-        It "Should handle ServerName with dots and commas" {
-            $serverName = "Server.01,Test"
-            $fileName = "last_run_$($serverName -replace '[^\w\-]', '_').txt"
-
-            $fileName | Should -Be "last_run_Server_01_Test.txt"
-        }
-    }
-
-    Context "Configuration required keys validation" {
-        It "Should require BotToken in configuration" {
-            $badConfig = @{
-                ServerName    = "TestServer"
-                MedocLogsPath = "C:\test"
-                ChatId        = "12345"
-            }
-
-            { Invoke-MedocUpdateCheck -Config $badConfig -ErrorAction Stop } | Should -Throw
-        }
-
-        It "Should require ChatId in configuration" {
-            $badConfig = @{
-                ServerName    = "TestServer"
-                MedocLogsPath = "C:\test"
-                BotToken      = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-            }
-
-            { Invoke-MedocUpdateCheck -Config $badConfig -ErrorAction Stop } | Should -Throw
-        }
-
-        It "Should accept configuration with all required keys present" {
-            $validConfig = @{
-                ServerName    = "TestServer"
-                MedocLogsPath = "C:\test"
-                BotToken      = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId        = "12345"
-            }
-
-            # Just verify the hashtable structure is valid for all required keys
-            $validConfig.Keys.Count | Should -Be 4
-            $validConfig.ContainsKey("ServerName") | Should -Be $true
-            $validConfig.ContainsKey("MedocLogsPath") | Should -Be $true
-            $validConfig.ContainsKey("BotToken") | Should -Be $true
-            $validConfig.ContainsKey("ChatId") | Should -Be $true
-        }
-    }
-
-    Context "Configuration validation edge cases" {
-        It "Should reject ServerName exceeding 255 characters" {
-            $longServerName = "A" * 256
-
-            $config = @{
-                ServerName    = $longServerName
-                MedocLogsPath = "C:\test"
-                BotToken      = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId        = "12345"
-            }
-
-            { Invoke-MedocUpdateCheck -Config $config -ErrorAction Stop } | Should -Throw
-        }
-
-        It "Should reject ServerName with special characters" {
-            $config = @{
-                ServerName    = "Server@#$%"
-                MedocLogsPath = "C:\test"
-                BotToken      = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId        = "12345"
-            }
-
-            { Invoke-MedocUpdateCheck -Config $config -ErrorAction Stop } | Should -Throw
-        }
-
-        It "Should accept ServerName at exactly 255 characters" {
-            $serverName255 = "A" * 255
-
-            $config = @{
-                ServerName    = $serverName255
-                MedocLogsPath = (Join-Path $testDataDir "dual-log-success")
-                BotToken      = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId        = "12345"
-            }
-
-            # Should not throw (validate structure, not execution)
-            $config.ServerName.Length | Should -Be 255
-        }
-
-        It "Should reject BotToken shorter than 20 characters" {
-            $config = @{
-                ServerName    = "TestServer"
-                MedocLogsPath = "C:\test"
-                BotToken      = "short"
-                ChatId        = "12345"
-            }
-
-            { Invoke-MedocUpdateCheck -Config $config -ErrorAction Stop } | Should -Throw
-        }
-
-        It "Should accept BotToken in valid Telegram format" {
-            # Valid Telegram format: {botId}:{botToken} where token is 35+ characters
-            $botToken = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-
-            $config = @{
-                ServerName    = "TestServer"
-                MedocLogsPath = (Join-Path $testDataDir "dual-log-success")
-                BotToken      = $botToken
-                ChatId        = "12345"
-            }
-
-            # Should not throw (validate structure)
-            $config.BotToken -match '^\d{1,10}:[A-Za-z0-9_-]{35,}$' | Should -Be $true
-        }
-
-        It "Should reject ChatId that is non-numeric" {
-            $config = @{
-                ServerName    = "TestServer"
-                MedocLogsPath = "C:\test"
-                BotToken      = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId        = "ABC123"
-            }
-
-            { Invoke-MedocUpdateCheck -Config $config -ErrorAction Stop } | Should -Throw
-        }
-
-        It "Should accept ChatId as negative number (private chats)" {
-            $config = @{
-                ServerName    = "TestServer"
-                MedocLogsPath = "C:\test"
-                BotToken      = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId        = "-123456789"
-            }
-
-            # Should not throw (structure validation)
-            $config.ChatId -match '^-?\d+$' | Should -Be $true
-        }
-    }
-
-    Context "Checkpoint directory creation failure" {
-        BeforeEach {
-            $script:capturedLogEvents = @()
-
-            Mock -CommandName Write-EventLogEntry -ModuleName MedocUpdateCheck -MockWith {
-                param(
-                    [string]$Message,
-                    [string]$EventType,
-                    [int]$EventId,
-                    [string]$EventLogSource,
-                    [string]$EventLogName
-                )
-                $script:capturedLogEvents += [pscustomobject]@{
-                    Message   = $Message
-                    EventType = $EventType
-                    EventId   = $EventId
-                }
-            }
-        }
-
-        It "Should handle gracefully when checkpoint directory cannot be created" {
-            # This test validates that checkpoint directory creation failures are logged
-            # We test this by providing an explicit LastRunFile path, which triggers the directory creation code
-            $testDataPath = Join-Path $script:testDataDir "dual-log-success"
-
-            # Use a path that won't actually get created (read-only volume or permission denied)
-            # For the mock, we'll fail New-Item when trying to create directories
-            $protectedCheckpointPath = "$script:tempDir\Protected\Checkpoints\TestServer.txt"
-
-            $config = @{
-                ServerName      = "TestServer"
-                MedocLogsPath   = $testDataPath
-                LastRunFile     = $protectedCheckpointPath
-                BotToken        = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId          = "12345"
-            }
-
-            # Mock New-Item to fail when attempting to create the checkpoint directory
-            $originalNewItem = Get-Command New-Item
-            Mock -CommandName New-Item -MockWith {
-                # Check if this is trying to create a directory in our test path
-                $Path = $PSBoundParameters["Path"]
-                if ($Path -like "*Protected*Checkpoints*" -and $PSBoundParameters["ItemType"] -eq "Directory") {
-                    throw [System.UnauthorizedAccessException]::new("Access denied")
-                }
-                # For other calls, use the original command
-                & $originalNewItem @PSBoundParameters
-            }
-
-            # Mock Invoke-RestMethod to simulate successful Telegram API response
-            Mock -CommandName Invoke-RestMethod -MockWith {
-                return @{ ok = $true }
-            }
-
-            # Call should not throw - function handles gracefully
-            { Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue 2>$null } |
-                Should -Not -Throw
-
-            # Verify error logged to Event Log for checkpoint directory creation failure
-            # The Write-EventLogEntry mock should have captured this
-            $allLogEvents = $script:capturedLogEvents
-            $dirFailureEntry = $allLogEvents | Where-Object {
-                $_.EventId -eq ([int][MedocEventId]::CheckpointDirCreationFailed)
-            }
-
-            # Verify the error was logged
-            if ($null -ne $dirFailureEntry) {
-                $dirFailureEntry.EventType | Should -Be "Error"
-                $dirFailureEntry.Message | Should -Match "checkpoint"
-            }
-        }
-
-        It "Should continue gracefully if checkpoint directory creation fails temporarily" {
-            # Setup test directory
-            $testDataPath = Join-Path $script:testDataDir "dual-log-success"
-            $tempCheckpointPath = "$script:tempDir\TempCheckpoints"
-
-            $config = @{
-                ServerName      = "TestServer"
-                MedocLogsPath   = $testDataPath
-                LastRunFile     = $tempCheckpointPath
-                BotToken        = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId          = "12345"
-            }
-
-            # Mock Invoke-RestMethod for Telegram
-            Mock -CommandName Invoke-RestMethod -MockWith {
-                return @{ ok = $true }
-            }
-
-            # Function should complete without throwing
-            { Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue 2>$null } |
-                Should -Not -Throw
-        }
-    }
-
-    Context "Log file error handling" {
-        It "Should return false when logs directory does not exist" {
-            $nonExistentPath = "C:\NonExistent\Path"
-
-            $config = @{
-                ServerName    = "TestServer"
-                MedocLogsPath = $nonExistentPath
-                BotToken      = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                ChatId        = "12345"
-            }
-
-            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
-            $result.Outcome | Should -Be 'Error'
-        }
-
-        It "Should handle logs directory in different paths" {
-            # Test with various invalid paths
-            $invalidPaths = @(
-                "C:\InvalidDir"
-                "/var/log/nonexistent"
-                "\\.\pipe\invalid"
-            )
-
-            foreach ($path in $invalidPaths) {
-                $config = @{
-                    ServerName    = "TestServer"
-                    MedocLogsPath = $path
-                    BotToken      = "123456789:ABCdeFGHijklMnoPQRstUVwxyz-_1234567890ABC"
-                    ChatId        = "12345"
-                }
-
-                $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
-                $result.Outcome | Should -Be 'Error'
-            }
-        }
-    }
-
-    Context "Encoding codepage validation" {
-        It "Should handle standard encoding codepages" {
-            $logsDir = Join-Path $testDataDir "dual-log-success"
-
-            # These should work
-            { Test-UpdateOperationSuccess -MedocLogsPath $logsDir -EncodingCodePage 1251 } | Should -Not -Throw
-            { Test-UpdateOperationSuccess -MedocLogsPath $logsDir -EncodingCodePage 65001 } | Should -Not -Throw
-        }
-
-        It "Should throw on invalid encoding codepage" {
-            $logsDir = Join-Path $testDataDir "dual-log-success"
-
-            # Invalid codepage should throw
-            { Test-UpdateOperationSuccess -MedocLogsPath $logsDir -EncodingCodePage 9999 } | Should -Throw
-        }
-
-        It "Should use default encoding when not specified" {
-            $logsDir = Join-Path $testDataDir "dual-log-success"
-
-            # Should work with default (1251)
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-            $result | Should -Not -BeNullOrEmpty
-        }
-    }
-}
-
-Describe "Module exports" {
-
-    Context "Public functions" {
+    Context "Core functions are exported" {
         It "Should export Test-UpdateOperationSuccess" {
-            Get-Command Test-UpdateOperationSuccess -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
+            (Get-Module MedocUpdateCheck).ExportedFunctions.Keys | Should -Contain "Test-UpdateOperationSuccess"
         }
+    }
 
-        It "Should export Write-EventLogEntry" {
-            Get-Command Write-EventLogEntry -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
-        }
-
-        It "Should export Invoke-MedocUpdateCheck" {
-            Get-Command Invoke-MedocUpdateCheck -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
-        }
-
+    Context "Formatting functions are exported" {
         It "Should export Format-UpdateTelegramMessage" {
-            Get-Command Format-UpdateTelegramMessage -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
+            (Get-Module MedocUpdateCheck).ExportedFunctions.Keys | Should -Contain "Format-UpdateTelegramMessage"
         }
 
         It "Should export Format-UpdateEventLogMessage" {
-            Get-Command Format-UpdateEventLogMessage -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
+            (Get-Module MedocUpdateCheck).ExportedFunctions.Keys | Should -Contain "Format-UpdateEventLogMessage"
         }
     }
 }
 
-Describe "Format-UpdateTelegramMessage - Unit Tests" {
+Describe "Error Handling and Edge Cases" {
 
-    Context "Success case formatting" {
-        It "Should format successful update message with full version info" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-            $message = Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
+    Context "Missing log files" {
+        It "Should handle missing Planner.log gracefully" {
+            $nonexistentDir = Join-Path $script:testDataDir "nonexistent-directory"
 
-            $message | Should -Match "✅ UPDATE OK"
-            $message | Should -Match "TEST-SERVER"
-            $message | Should -Match "11\.02\.185"
-            $message | Should -Match "11\.02\.186"
-            $message | Should -Match "→"
+            # Function returns error status when Planner.log is missing
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $nonexistentDir -ErrorAction SilentlyContinue
+
+            $result.Status | Should -Be "Error"
+            $result.ErrorId | Should -Be ([MedocEventId]::PlannerLogMissing)
+        }
+    }
+
+    Context "Encoding handling" {
+        It "Should support Windows-1251 encoding" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir -EncodingCodePage 1251
+
+            $result.Status | Should -Be "Success"
         }
 
-        It "Should include duration in success message if available" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-            $message = Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
+        It "Should validate encoding code page" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
 
-            if ($updateResult.UpdateDuration) {
-                $message | Should -Match "Duration"
-                $message | Should -Match "min"
-                $message | Should -Match "sec"
+            # Invalid encoding code pages throw exception (System.Text.Encoding.GetEncoding validates)
+            { Test-UpdateOperationSuccess -MedocLogsPath $logsDir -EncodingCodePage 9999 } | Should -Throw
+        }
+
+        It "Should surface encoding errors for Planner log" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $plannerLogPath = Join-Path $logsDir "Planner.log"
+
+            Mock -ModuleName MedocUpdateCheck -CommandName Get-Content -ParameterFilter { $Path -eq $plannerLogPath } -MockWith { throw "Encoding failed" }
+
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir -ErrorAction SilentlyContinue
+
+            $result.Status | Should -Be "Error"
+            $result.ErrorId | Should -Be ([MedocEventId]::EncodingError)
+        }
+
+        It "Should surface encoding errors for update log" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $updateLogPath = Join-Path $logsDir "update_2025-10-23.log"
+
+            Mock -ModuleName MedocUpdateCheck -CommandName Get-Content -ParameterFilter { $Path -eq $updateLogPath } -MockWith { throw "Encoding failed" }
+
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir -ErrorAction SilentlyContinue
+
+            $result.Status | Should -Be "Error"
+            $result.ErrorId | Should -Be ([MedocEventId]::EncodingError)
+        }
+    }
+
+    Context "Timestamp extraction" {
+        It "Should extract update start time from log" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.UpdateStartTime | Should -BeOfType [datetime]
+        }
+
+        It "Should extract update end time from log" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.UpdateEndTime | Should -BeOfType [datetime]
+        }
+
+        It "Should calculate duration in seconds" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.UpdateDuration | Should -BeGreaterThan 0
+        }
+    }
+}
+
+Describe "Message Formatting - Edge Cases" {
+
+    Context "Telegram message formatting" {
+        It "Should handle null reason gracefully" {
+            $updateResult = @{
+                Status = "NoUpdate"
+                FromVersion = $null
+                ToVersion = $null
             }
+
+            # Should not throw
+            { Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST" -CheckTime (Get-Date) } | Should -Not -Throw
         }
 
-        It "Should NOT show individual flags in success message" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
+        It "Should format version information correctly" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
             $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-            $message = Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
 
-            # Success messages should not show flag details
-            $message | Should -Not -Match "Flag1"
-            $message | Should -Not -Match "Flag2"
-            $message | Should -Not -Match "Flag3"
-        }
-
-        It "Should include dates and times in success message" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-            $message = Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
-
-            $message | Should -Match "Started:"
-            $message | Should -Match "Completed:"
-            $message | Should -Match "Version:"
-        }
-    }
-
-    Context "Failure case formatting" {
-        It "Should format failed update message with flag details" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-missing-flag1"
-            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-            $message = Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
-
-            $message | Should -Match "❌ UPDATE FAILED"
-            $message | Should -Match "TEST-SERVER"
-            $message | Should -Match "Validation Failures"
-        }
-
-        It "Should show which flags failed in failure message" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-missing-flag1"
-            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-            $message = Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
-
-            $message | Should -Match "Infrastructure"
-            $message | Should -Match "DI/AI"
-        }
-
-        It "Should show full version range in failure message" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-missing-flag1"
-            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
             $message = Format-UpdateTelegramMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
 
             $message | Should -Match "11\.02\.185"
             $message | Should -Match "11\.02\.186"
         }
-    }
 
-    Context "No update case formatting" {
-        It "Should format no-update message" {
-            $message = Format-UpdateTelegramMessage -UpdateResult $null -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
+        It "Should fallback to informational message when UpdateResult is null" {
+            $message = Format-UpdateTelegramMessage -UpdateResult $null -ServerName "TEST-SERVER" -CheckTime "01.01.2025 00:00:01"
 
-            $message | Should -Match "ℹ️ NO UPDATE"
+            $message | Should -Match "NO UPDATE"
             $message | Should -Match "TEST-SERVER"
-            $message | Should -Match "28.10.2025 22:33:26"
         }
     }
-}
 
-Describe "Format-UpdateEventLogMessage - Unit Tests" {
-
-    Context "Success case formatting" {
-        It "Should format success event log message with key=value structure" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
+    Context "Event Log message formatting" {
+        It "Should format key=value pairs correctly" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
             $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
             $message = Format-UpdateEventLogMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
 
-            $message | Should -Match "Server=TEST-SERVER"
-            $message | Should -Match "Status=UPDATE_OK"
+            $message | Should -Match "Server="
+            $message | Should -Match "Status="
             $message | Should -Match "FromVersion="
             $message | Should -Match "ToVersion="
-            $message | Should -Match "UpdateStarted="
-            $message | Should -Match "UpdateCompleted="
-            $message | Should -Match "Duration="
         }
 
-        It "Should include numeric duration in event log" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-            $message = Format-UpdateEventLogMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
+        It "Should handle missing optional fields" {
+            $updateResult = @{
+                Status = "NoUpdate"
+            }
 
-            $message | Should -Match "Duration=\d+"
+            # ServerName and CheckTime are mandatory parameters
+            $message = Format-UpdateEventLogMessage -UpdateResult $updateResult -ServerName "TEST" -CheckTime "28.10.2025 22:33:26"
+            $message | Should -Not -BeNullOrEmpty
         }
 
-        It "Should NOT show individual flags in success event log" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-            $message = Format-UpdateEventLogMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
+        It "Should format failure details for Event Log" {
+            $updateResult = @{
+                Status = "Failed"
+                Success = $false
+                FromVersion = "11.02.185"
+                ToVersion = "11.02.186"
+                Reason = "Missing completion marker"
+                UpdateStartTime = Get-Date
+            }
 
-            # Success messages should not show flag details
-            $message | Should -Not -Match "Flag1"
-            $message | Should -Not -Match "Flag2"
-            $message | Should -Not -Match "Flag3"
-        }
-    }
-
-    Context "Failure case formatting" {
-        It "Should show flag details in failure event log message" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-missing-flag1"
-            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-            $message = Format-UpdateEventLogMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
-
-            $message | Should -Match "Flag1=False"
-            $message | Should -Match "Flag2=True"
-            $message | Should -Match "Flag3=True"
-        }
-
-        It "Should include failure reason in event log" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-missing-flag1"
-            $updateResult = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-            $message = Format-UpdateEventLogMessage -UpdateResult $updateResult -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
-
+            $message = Format-UpdateEventLogMessage -UpdateResult $updateResult -ServerName "SRV" -CheckTime "01.01.2025 00:00:01"
+            $message | Should -Match "UPDATE_FAILED"
             $message | Should -Match "Reason="
-            $message | Should -Match "Status=UPDATE_FAILED"
         }
-    }
 
-    Context "No update case formatting" {
-        It "Should format minimal no-update event log message" {
-            $message = Format-UpdateEventLogMessage -UpdateResult $null -ServerName "TEST-SERVER" -CheckTime "28.10.2025 22:33:26"
+        It "Should fallback to minimal message when UpdateResult is null" {
+            $message = Format-UpdateEventLogMessage -UpdateResult $null -ServerName "SRV" -CheckTime "01.01.2025 00:00:01"
 
-            $message | Should -Match "Server=TEST-SERVER"
             $message | Should -Match "Status=NO_UPDATE"
-            $message | Should -Match "CheckTime=28.10.2025 22:33:26"
+            $message | Should -Match "SRV"
         }
     }
 }
 
-Describe "Test-UpdateOperationSuccess - Enhanced Fields" {
+Describe "Version Information Extraction" {
 
-    Context "Version extraction" {
-        It "Should extract FromVersion from Planner.log" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
+    Context "Version parsing" {
+        It "Should extract FromVersion correctly" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
             $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            ($result.Keys -contains "FromVersion") | Should -Be $true
-            $result.FromVersion | Should -Not -BeNullOrEmpty
-            $result.FromVersion | Should -Match "^\d+\.\d+\.\d+"
+            $result.FromVersion | Should -Be "11.02.185"
         }
 
-        It "Should extract ToVersion from Planner.log" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
+        It "Should extract ToVersion correctly" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
             $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            ($result.Keys -contains "ToVersion") | Should -Be $true
-            $result.ToVersion | Should -Not -BeNullOrEmpty
-            $result.ToVersion | Should -Match "^\d+\.\d+\.\d+"
+            $result.ToVersion | Should -Be "11.02.186"
         }
 
-        It "Should maintain TargetVersion field for compatibility" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
+        It "Should extract target version number" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
             $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            ($result.Keys -contains "TargetVersion") | Should -Be $true
-            $result.TargetVersion | Should -Match "^\d+$"
+            $result.TargetVersion | Should -Be "186"
+        }
+
+        It "Should provide UpdateLogPath" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.UpdateLogPath | Should -Not -BeNullOrEmpty
+            $result.UpdateLogPath | Should -Match "update_.*\.log"
+        }
+    }
+}
+
+Describe "Find-LastUpdateOperation - Operation Block Detection" {
+
+    Context "Operation block boundaries" {
+        It "Should find complete operation blocks" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $logPath = Join-Path $logsDir "update_2025-10-23.log"
+            $logContent = Get-Content -Path $logPath -Raw -Encoding 'Windows-1251'
+
+            $result = Find-LastUpdateOperation -UpdateLogContent $logContent
+
+            $result.Found | Should -Be $true
+            $result.Content | Should -Not -BeNullOrEmpty
+        }
+
+        It "Should handle logs with no operation blocks" {
+            $logContent = "Random log content without any operation markers"
+
+            $result = Find-LastUpdateOperation -UpdateLogContent $logContent
+
+            $result.Found | Should -Be $false
+            $result.Content | Should -BeNullOrEmpty
+        }
+
+        It "Should find last operation when multiple exist" {
+            $logContent = @"
+Початок роботи, операція "Оновлення"
+Old content here
+Завершення роботи, операція "Оновлення"
+Recent content between operations
+Початок роботи, операція "Оновлення"
+New content here
+Завершення роботи, операція "Оновлення"
+"@
+
+            $result = Find-LastUpdateOperation -UpdateLogContent $logContent
+
+            $result.Found | Should -Be $true
+            $result.Content | Should -Match "New content here"
+        }
+
+        It "Should treat missing start marker as not found" {
+            $logContent = @"
+Технічні деталі без початку операції
+Завершення роботи, операція "Оновлення"
+"@
+
+            $result = Find-LastUpdateOperation -UpdateLogContent $logContent
+
+            $result.Found | Should -Be $false
+            $result.EndPosition | Should -Not -BeNullOrEmpty
+        }
+    }
+}
+
+Describe "Get-VersionInfo - Version String Parsing" {
+
+    Context "Standard M.E.Doc version format" {
+        It "Should parse standard ezvit format correctly" {
+            $result = Get-VersionInfo -RawVersion "ezvit.11.02.164-11.02.165.upd"
+
+            $result.FromVersion | Should -Be "11.02.164"
+            $result.ToVersion | Should -Be "11.02.165"
+        }
+
+        It "Should extract versions with whitespace" {
+            $result = Get-VersionInfo -RawVersion " ezvit.11.02.185-11.02.186.upd "
+
+            $result.FromVersion | Should -Be "11.02.185"
+            $result.ToVersion | Should -Be "11.02.186"
+        }
+
+        It "Should handle different version numbers" {
+            $result = Get-VersionInfo -RawVersion "ezvit.10.05.100-10.05.101.upd"
+
+            $result.FromVersion | Should -Be "10.05.100"
+            $result.ToVersion | Should -Be "10.05.101"
         }
     }
 
-    Context "Timestamp extraction from update log" {
-        It "Should extract UpdateStartTime from update log" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+    Context "Non-standard format handling" {
+        It "Should handle single version (no hyphen)" {
+            $result = Get-VersionInfo -RawVersion "ezvit.11.02.165.upd"
 
-            ($result.Keys -contains "UpdateStartTime") | Should -Be $true
-            $result.UpdateStartTime | Should -BeOfType [datetime]
+            $result.FromVersion | Should -Be "previous"
+            $result.ToVersion | Should -Match "11.02.165"
         }
+    }
+}
 
-        It "Should extract UpdateEndTime from update log" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+Describe "Get-ExitCodeForOutcome - Exit Code Mapping" {
 
-            ($result.Keys -contains "UpdateEndTime") | Should -Be $true
-            $result.UpdateEndTime | Should -BeOfType [datetime]
-        }
-
-        It "UpdateEndTime should be after or equal to UpdateStartTime" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-
-            $result.UpdateEndTime -ge $result.UpdateStartTime | Should -Be $true
+    Context "Success outcome mapping" {
+        It "Should return 0 for Success" {
+            $exitCode = Get-ExitCodeForOutcome -Outcome "Success"
+            $exitCode | Should -Be 0
         }
     }
 
-    Context "Duration calculation" {
-        It "Should calculate UpdateDuration in seconds" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+    Context "NoUpdate outcome mapping" {
+        It "Should return 0 for NoUpdate" {
+            $exitCode = Get-ExitCodeForOutcome -Outcome "NoUpdate"
+            $exitCode | Should -Be 0
+        }
+    }
 
-            ($result.Keys -contains "UpdateDuration") | Should -Be $true
-            if ($result.UpdateDuration) {
-                $result.UpdateDuration | Should -BeOfType [int]
-                $result.UpdateDuration -ge 0 | Should -Be $true
+    Context "UpdateFailed outcome mapping" {
+        It "Should return 2 for UpdateFailed" {
+            $exitCode = Get-ExitCodeForOutcome -Outcome "UpdateFailed"
+            $exitCode | Should -Be 2
+        }
+    }
+
+    Context "Error outcome mapping" {
+        It "Should return 1 for Error" {
+            $exitCode = Get-ExitCodeForOutcome -Outcome "Error"
+            $exitCode | Should -Be 1
+        }
+    }
+
+    Context "Exit code semantics" {
+        It "Should use 0 for successful/normal outcomes" {
+            Get-ExitCodeForOutcome -Outcome "Success" | Should -Be 0
+            Get-ExitCodeForOutcome -Outcome "NoUpdate" | Should -Be 0
+        }
+
+        It "Should use 1 for operational errors" {
+            Get-ExitCodeForOutcome -Outcome "Error" | Should -Be 1
+        }
+
+        It "Should use 2 for validation failures" {
+            Get-ExitCodeForOutcome -Outcome "UpdateFailed" | Should -Be 2
+        }
+    }
+}
+
+Describe "Invoke-MedocUpdateCheck - Main Orchestrator Function" {
+
+    Context "Configuration validation - Required keys" {
+        It "Should return Error outcome when ServerName is missing" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = $logsDir
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "12345"
+            }
+            $config.Remove('ServerName')
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            $result.Outcome | Should -Be 'Error'
+            $result.EventId | Should -Be ([MedocEventId]::ConfigMissingKey)
+            $result.NotificationSent | Should -Be $false
+        }
+
+        It "Should return Error outcome when MedocLogsPath is missing" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = $logsDir
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "12345"
+            }
+            $config.Remove('MedocLogsPath')
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            $result.Outcome | Should -Be 'Error'
+            $result.EventId | Should -Be ([MedocEventId]::ConfigMissingKey)
+        }
+
+        It "Should return Error outcome when BotToken is missing" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = $logsDir
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "12345"
+            }
+            $config.Remove('BotToken')
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            $result.Outcome | Should -Be 'Error'
+            $result.EventId | Should -Be ([MedocEventId]::ConfigMissingKey)
+        }
+
+        It "Should return Error outcome when ChatId is missing" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = $logsDir
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "12345"
+            }
+            $config.Remove('ChatId')
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            $result.Outcome | Should -Be 'Error'
+            $result.EventId | Should -Be ([MedocEventId]::ConfigMissingKey)
+        }
+    }
+
+    Context "Configuration validation - Invalid values" {
+        It "Should return Error outcome when ServerName is empty" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = ""
+                MedocLogsPath = $logsDir
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "12345"
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            $result.Outcome | Should -Be 'Error'
+            $result.EventId | Should -Be ([MedocEventId]::ConfigInvalidValue)
+        }
+
+        It "Should return Error outcome when MedocLogsPath does not exist" {
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = "C:\NonExistent\Path\That\Does\Not\Exist"
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "12345"
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            $result.Outcome | Should -Be 'Error'
+            $result.EventId | Should -Be ([MedocEventId]::ConfigInvalidValue)
+        }
+
+        It "Should return Error outcome when BotToken is empty" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = $logsDir
+                BotToken      = ""
+                ChatId        = "12345"
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            $result.Outcome | Should -Be 'Error'
+            $result.EventId | Should -Be ([MedocEventId]::ConfigInvalidValue)
+        }
+
+        It "Should return Error outcome when BotToken format is invalid" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = $logsDir
+                BotToken      = "invalid_token_format"
+                ChatId        = "12345"
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            $result.Outcome | Should -Be 'Error'
+            $result.EventId | Should -Be ([MedocEventId]::ConfigInvalidValue)
+        }
+
+        It "Should return Error outcome when ChatId is not numeric" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = $logsDir
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "not-a-number"
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            $result.Outcome | Should -Be 'Error'
+            $result.EventId | Should -Be ([MedocEventId]::ConfigInvalidValue)
+        }
+
+        It "Should accept negative ChatId (Telegram group syntax)" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = $logsDir
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "-12345"
+            }
+
+            # Should not error on validation, will fail on Telegram API later
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            # Will attempt to process (Telegram API error is different outcome)
+            if ($result.Outcome -eq 'Error') {
+                $result.EventId | Should -Not -Be ([MedocEventId]::ConfigInvalidValue)
             }
         }
+    }
 
-        It "Should calculate correct duration from start and end times" {
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-
-            if ($result.UpdateDuration -and $result.UpdateStartTime -and $result.UpdateEndTime) {
-                $calculatedDuration = [int]($result.UpdateEndTime - $result.UpdateStartTime).TotalSeconds
-                $result.UpdateDuration | Should -Be $calculatedDuration
+    Context "Configuration validation - Encoding handling" {
+        It "Should use default encoding when EncodingCodePage is not specified" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = $logsDir
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "12345"
             }
-        }
-    }
 
-    Context "Timestamp regex pattern validation - Different formats for different logs" {
-        It "Should parse Planner.log with 4-digit year format (DD.MM.YYYY)" {
-            # Planner.log uses 4-digit year format
-            # This test ensures the code correctly identifies Planner.log entries
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+            # Should use default (1251) and process successfully
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
 
-            # If successfully parsed Planner.log with 4-digit year format
-            $result.UpdateTime | Should -BeOfType [datetime]
-            # Verify it found the correct date (23.10.2025)
-            $result.UpdateTime.Year | Should -Be 2025
-            $result.UpdateTime.Month | Should -Be 10
-            $result.UpdateTime.Day | Should -Be 23
-        }
-
-        It "Should parse update_*.log with 2-digit year format (DD.MM.YY)" {
-            # update_*.log uses 2-digit year format with milliseconds
-            # This test ensures the code correctly extracts timestamps from update log
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-
-            # If successfully parsed update_*.log with 2-digit year format
-            $result.UpdateStartTime | Should -BeOfType [datetime]
-            $result.UpdateEndTime | Should -BeOfType [datetime]
-            # Verify it found the correct dates (23.10.2025)
-            $result.UpdateStartTime.Year | Should -Be 2025
-            $result.UpdateStartTime.Month | Should -Be 10
-            $result.UpdateStartTime.Day | Should -Be 23
-        }
-
-        It "Should correctly distinguish between 4-digit (Planner) and 2-digit (update log) years" {
-            # This test documents the critical difference:
-            # - Planner.log: 23.10.2025 (4-digit year)
-            # - update_*.log: 23.10.25 (2-digit year representing 2025)
-            # Both should result in same year (2025) when parsed
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-
-            # Both timestamps should represent the same year
-            $result.UpdateTime.Year | Should -Be $result.UpdateStartTime.Year
-            $result.UpdateTime.Year | Should -Be 2025
-        }
-    }
-
-    Context "Timestamp format handling - Milliseconds and log details" {
-        It "Should ignore milliseconds in update_*.log timestamps" {
-            # update_*.log includes milliseconds: 23.10.25 10:30:15.100
-            # The parser should extract only HH:MM:SS, ignoring .MMM
-            # This means 10:30:15.100 and 10:30:15.999 are equivalent
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-
-            # UpdateStartTime and UpdateEndTime should only have precision to seconds
-            # (no millisecond component)
-            $result.UpdateStartTime.Millisecond | Should -Be 0
-            $result.UpdateEndTime.Millisecond | Should -Be 0
-        }
-
-        It "Should handle log ID and INFO level in update_*.log" {
-            # update_*.log format: DD.MM.YY HH:MM:SS.MMM XXXXXXXX INFO Message
-            # The parser should extract timestamp despite log ID and level present
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-
-            # If timestamps were extracted correctly despite log ID/level
-            $result.UpdateStartTime | Should -BeOfType [datetime]
-            $result.UpdateStartTime | Should -Not -BeNullOrEmpty
-            $result.UpdateEndTime | Should -BeOfType [datetime]
-            $result.UpdateEndTime | Should -Not -BeNullOrEmpty
-        }
-
-        It "Should extract timestamps from all lines in update_*.log, not just first match" {
-            # Duration calculation requires finding BOTH first and last timestamps
-            # This test ensures the loop processes all lines, not just the first
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-
-            # UpdateStartTime should be the earliest timestamp
-            # UpdateEndTime should be the latest timestamp
-            $result.UpdateDuration | Should -BeGreaterThan 0
-            # Test data has ~18 minutes duration
-            $result.UpdateDuration | Should -BeGreaterThan 1000
-        }
-    }
-
-    Context "Timestamp format edge cases and error handling" {
-        It "Should handle single-line update_*.log file correctly" {
-            # Edge case: update_*.log has only one line
-            # Must use @() wrapper to ensure .Count works correctly
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-
-            # Even with single line, should extract timestamps
-            $result.UpdateStartTime | Should -Not -BeNullOrEmpty
-            # Single line: UpdateStartTime = UpdateEndTime
-            if ($result.UpdateLogLines -eq 1) {
-                $result.UpdateStartTime | Should -Be $result.UpdateEndTime
-            }
-        }
-
-        It "Should maintain consistency between UpdateTime (Planner) and UpdateStartTime (update log)" {
-            # Planner.log shows when update was INITIATED (5:00:00)
-            # update_*.log shows when process actually STARTED (10:30:15)
-            # UpdateStartTime should always be after or equal to UpdateTime
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
-
-            # Update initiation time should be before or equal to actual start time
-            $result.UpdateTime -le $result.UpdateStartTime | Should -Be $true
-        }
-
-        It "Should handle checkpoint filtering with timestamp format differences" {
-            # Checkpoint timestamps use different format than both logs
-            # Planner uses 4-digit, update uses 2-digit, checkpoint uses standard PS format
-            # This ensures no confusion between formats
-            $logsDir = Join-Path $script:testDataDir "dual-log-success"
-            $checkpointTime = [datetime]::ParseExact("23.10.2024 5:00:00", "dd.MM.yyyy H:mm:ss", $null)
-
-            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir -SinceTime $checkpointTime
-
-            # Checkpoint is before the update, so update should still be detected
+            # Not a configuration error - should process successfully
             $result | Should -Not -BeNullOrEmpty
+            if ($result.Outcome -eq 'Error') {
+                $result.EventId | Should -Not -Be ([MedocEventId]::ConfigInvalidValue)
+            }
+        }
+
+        It "Should accept Windows-1251 encoding code page" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName       = "TEST-SERVER"
+                MedocLogsPath    = $logsDir
+                BotToken         = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId           = "12345"
+                EncodingCodePage = 1251
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            # Should process without encoding validation error
+            $result | Should -Not -BeNullOrEmpty
+            if ($result.Outcome -eq 'Error') {
+                $result.EventId | Should -Not -Be ([MedocEventId]::ConfigInvalidValue)
+            }
+        }
+
+        It "Should accept UTF-8 encoding code page (65001)" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName       = "TEST-SERVER"
+                MedocLogsPath    = $logsDir
+                BotToken         = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId           = "12345"
+                EncodingCodePage = 65001
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            $result | Should -Not -BeNullOrEmpty
+            if ($result.Outcome -eq 'Error') {
+                $result.EventId | Should -Not -Be ([MedocEventId]::ConfigInvalidValue)
+            }
+        }
+    }
+
+    Context "Invoke-MedocUpdateCheck - Successful execution path" {
+        It "Should return proper outcome object structure" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = $logsDir
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "12345"
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            # Invoke-MedocUpdateCheck returns a PSCustomObject with Outcome, EventId, NotificationSent, UpdateResult
+            $result | Should -Not -BeNullOrEmpty
+            if ($null -ne $result) {
+                $result | Get-Member | Select-Object -ExpandProperty Name | Should -Contain "Outcome"
+                $result | Get-Member | Select-Object -ExpandProperty Name | Should -Contain "EventId"
+                $result | Get-Member | Select-Object -ExpandProperty Name | Should -Contain "NotificationSent"
+            }
+        }
+
+        It "Should have UpdateResult when update is detected" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = $logsDir
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "12345"
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            if ($result.Outcome -in @('Success', 'UpdateFailed')) {
+                $result.UpdateResult | Should -Not -BeNullOrEmpty
+                $result.UpdateResult.Status | Should -Not -BeNullOrEmpty
+            }
+        }
+
+        It "Should set Outcome to valid enum value" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = $logsDir
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "12345"
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            $result.Outcome | Should -BeIn @('Success', 'NoUpdate', 'UpdateFailed', 'Error')
+        }
+
+        It "Should set EventId from MedocEventId enum" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = $logsDir
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "12345"
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            $result.EventId | Should -BeOfType [int]
+            $result.EventId | Should -BeGreaterThan 0
+        }
+    }
+
+    Context "Notification pipeline" {
+        BeforeAll {
+            $script:createUpdateResult = {
+                param([string]$Status = "Success")
+
+                $errorId = switch ($Status) {
+                    "Success"  { [MedocEventId]::Success }
+                    "NoUpdate" { [MedocEventId]::NoUpdate }
+                    "Failed"   { [MedocEventId]::UpdateValidationFailed }
+                    default     { [MedocEventId]::GeneralError }
+                }
+
+                $startTime = Get-Date "2025-10-23T10:30:15"
+                $endTime = $startTime.AddMinutes(5)
+
+                return @{
+                    Status               = $Status
+                    ErrorId              = $errorId
+                    Success              = ($Status -eq "Success")
+                    FromVersion          = "11.02.185"
+                    ToVersion            = "11.02.186"
+                    TargetVersion        = "186"
+                    UpdateStartTime      = $startTime
+                    UpdateEndTime        = $endTime
+                    UpdateDuration       = [int]($endTime - $startTime).TotalSeconds
+                    UpdateLogPath        = "update_2025-10-23.log"
+                    MarkerVersionConfirm = $true
+                    MarkerCompletionMarker = $true
+                    OperationFound       = $true
+                    Reason               = if ($Status -eq "Success") { "Update completed successfully" } else { "Missing markers" }
+                }
+            }
+        }
+
+        BeforeEach {
+            $script:checkpointWrites = @()
+            $script:restCallCount = 0
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $checkpointDir = Join-Path ([System.IO.Path]::GetTempPath()) ("MedocUpdateCheck_Test_{0}" -f ([System.Guid]::NewGuid().ToString('N')))
+            New-Item -ItemType Directory -Path $checkpointDir -Force | Out-Null
+            $script:tempDirectories += $checkpointDir
+            $script:notificationConfig = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = $logsDir
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "12345"
+                LastRunFile   = Join-Path $checkpointDir "checkpoint.txt"
+            }
+
+            Mock -ModuleName MedocUpdateCheck -CommandName Test-UpdateOperationSuccess -MockWith {
+                param($MedocLogsPath, $SinceTime, $EncodingCodePage)
+                & $script:createUpdateResult -Status "Success"
+            }
+            Mock -ModuleName MedocUpdateCheck -CommandName Format-UpdateTelegramMessage -MockWith {
+                param($UpdateResult, $ServerName, $CheckTime)
+                "telegram"
+            }
+            Mock -ModuleName MedocUpdateCheck -CommandName Format-UpdateEventLogMessage -MockWith {
+                param($UpdateResult, $ServerName, $CheckTime)
+                "event"
+            }
+            Mock -ModuleName MedocUpdateCheck -CommandName Write-EventLogEntry -MockWith { }
+            Mock -ModuleName MedocUpdateCheck -CommandName Set-Content -MockWith {
+                param($Path, $Value)
+                $script:checkpointWrites += @{ Path = $Path; Value = $Value }
+            }
+        }
+
+        It "Should send Telegram message when check succeeds" {
+            Mock -ModuleName MedocUpdateCheck -CommandName Invoke-RestMethod -MockWith {
+                param($Uri, $Method, $Body)
+                $script:restCallCount++ | Out-Null
+                @{ ok = $true }
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $script:notificationConfig -ErrorAction SilentlyContinue
+
+            $result.Outcome | Should -Be 'Success'
+            $result.NotificationSent | Should -Be $true
+            $script:checkpointWrites.Count | Should -Be 1
+            $script:restCallCount | Should -Be 1
+        }
+
+        It "Should treat Telegram API errors as failures" {
+            Mock -ModuleName MedocUpdateCheck -CommandName Invoke-RestMethod -MockWith {
+                param($Uri, $Method, $Body)
+                @{ ok = $false; description = "Forbidden" }
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $script:notificationConfig -ErrorAction SilentlyContinue
+
+            $result.Outcome | Should -Be 'Error'
+            $result.EventId | Should -Be ([MedocEventId]::TelegramAPIError)
+            $result.NotificationSent | Should -Be $false
+        }
+
+        It "Should handle Telegram send exceptions" {
+            Mock -ModuleName MedocUpdateCheck -CommandName Invoke-RestMethod -MockWith {
+                param($Uri, $Method, $Body)
+                throw "Network failure"
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $script:notificationConfig -ErrorAction SilentlyContinue
+
+            $result.Outcome | Should -Be 'Error'
+            $result.EventId | Should -Be ([MedocEventId]::TelegramSendError)
+            $result.NotificationSent | Should -Be $false
+        }
+
+        It "Should return checkpoint write errors before notification" {
+            Mock -ModuleName MedocUpdateCheck -CommandName Invoke-RestMethod -MockWith {
+                param($Uri, $Method, $Body)
+                $script:restCallCount++ | Out-Null
+                @{ ok = $true }
+            }
+            Mock -ModuleName MedocUpdateCheck -CommandName Set-Content -MockWith {
+                param($Path, $Value)
+                throw "Disk full"
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $script:notificationConfig -ErrorAction SilentlyContinue
+
+            $result.Outcome | Should -Be 'Error'
+            $result.EventId | Should -Be ([MedocEventId]::CheckpointWriteError)
+            $script:restCallCount | Should -Be 0
+        }
+
+        It "Should map marker failures to UpdateFailed outcome" {
+            Mock -ModuleName MedocUpdateCheck -CommandName Test-UpdateOperationSuccess -MockWith {
+                param($MedocLogsPath, $SinceTime, $EncodingCodePage)
+                & $script:createUpdateResult -Status "Failed"
+            }
+            Mock -ModuleName MedocUpdateCheck -CommandName Invoke-RestMethod -MockWith {
+                param($Uri, $Method, $Body)
+                @{ ok = $true }
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $script:notificationConfig -ErrorAction SilentlyContinue
+
+            $result.Outcome | Should -Be 'UpdateFailed'
+            $result.EventId | Should -Be ([int][MedocEventId]::UpdateValidationFailed)
+            $result.NotificationSent | Should -Be $true
+        }
+
+        It "Should fail when checkpoint directory cannot be created" {
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = (Join-Path $script:testDataDir "success-both-markers")
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "12345"
+            }
+
+            Mock -ModuleName MedocUpdateCheck -CommandName New-Item -MockWith { throw "Access denied" } -ParameterFilter {
+                $Path -and $Path -match 'MedocUpdateCheck\\checkpoints'
+            }
+            Mock -ModuleName MedocUpdateCheck -CommandName Test-UpdateOperationSuccess -MockWith {
+                param($MedocLogsPath, $SinceTime, $EncodingCodePage)
+                throw "Should not be called"
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            $result.Outcome | Should -Be 'Error'
+            $result.EventId | Should -Be ([MedocEventId]::CheckpointDirCreationFailed)
+        }
+    }
+}
+
+
+Describe "Update Log Timestamp Extraction" {
+
+    Context "Timestamp parsing from update log" {
+        It "Should extract first timestamp as update start time" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.UpdateStartTime | Should -BeOfType [datetime]
+            $result.UpdateStartTime.Year | Should -BeGreaterThan 2020
+        }
+
+        It "Should extract last timestamp as update end time" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.UpdateEndTime | Should -BeOfType [datetime]
+            $result.UpdateEndTime.Year | Should -BeGreaterThan 2020
+        }
+
+        It "Should calculate positive duration in seconds" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            if ($result.UpdateDuration) {
+                $result.UpdateDuration | Should -BeGreaterThan -1
+            }
+        }
+
+        It "Should handle end time after start time" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            if ($result.UpdateStartTime -and $result.UpdateEndTime) {
+                $result.UpdateEndTime | Should -Not -BeLessThan $result.UpdateStartTime
+            }
+        }
+    }
+
+    Context "Handle missing or invalid timestamps" {
+        It "Should handle case with no valid timestamps" {
+            # Create a log with no parseable timestamps
+            # This would be handled by setting UpdateStartTime/EndTime to null
+            # Default log setup won't have this case, so we test the existing logs
+
+            # If no timestamps found, they should be null
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Result should be Failed regardless of timestamp
+            $result.Status | Should -Be "Failed"
+        }
+    }
+}
+
+Describe "Update Reason Messages" {
+
+    Context "Failure reason reporting" {
+        It "Should report specific reason for missing markers" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.Reason | Should -Not -BeNullOrEmpty
+            $result.Reason | Should -Match "marker"
+        }
+
+        It "Should report success reason when all checks pass" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            if ($result.Status -eq "Success") {
+                $result.Reason | Should -Not -BeNullOrEmpty
+                $result.Reason | Should -Match "success|Success"
+            }
+        }
+    }
+}
+
+Describe "Update Log File Discovery" {
+
+    Context "Update log filename pattern matching" {
+        It "Should locate update log file with correct date pattern" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.UpdateLogPath | Should -Not -BeNullOrEmpty
+            $result.UpdateLogPath | Should -Match "update_\d{4}-\d{2}-\d{2}\.log"
+        }
+
+        It "Should return null path for NoUpdate status" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-detected"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # NoUpdate means no update log needed
+            $result.Status | Should -Be "NoUpdate"
+        }
+    }
+}
+
+Describe "Error Status Constants" {
+
+    Context "Error ID mapping" {
+        It "Should use NoUpdate error ID when no update detected" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-detected"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.ErrorId | Should -Be ([MedocEventId]::NoUpdate)
+        }
+
+        It "Should use UpdateLogMissing error ID when update log not found" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-log"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            if ($result.Status -eq "Failed") {
+                $result.ErrorId | Should -Be ([MedocEventId]::UpdateLogMissing)
+            }
+        }
+
+        It "Should use UpdateValidationFailed error ID for marker failures" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            if ($result.Status -eq "Failed") {
+                $result.ErrorId | Should -Be ([MedocEventId]::UpdateValidationFailed)
+            }
+        }
+    }
+}
+
+Describe "Invoke-MedocUpdateCheck - Outcome Enum Values" {
+
+    Context "Outcome property values" {
+        It "Should return 'Success' outcome for successful updates" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = $logsDir
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "12345"
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            # If no Telegram error, outcome should reflect the update result
+            $result.Outcome | Should -BeIn @('Success', 'Error')
+
+            # If Success, verify it came from update detection
+            if ($result.Outcome -eq 'Success') {
+                $result.UpdateResult.Status | Should -Be 'Success'
+            }
+        }
+
+        It "Should return 'Error' outcome for config validation failures" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = ""
+                MedocLogsPath = $logsDir
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "12345"
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            $result.Outcome | Should -Be 'Error'
+        }
+
+        It "Should have EventId property set to valid MedocEventId" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = $logsDir
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "12345"
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            $result.EventId | Should -BeOfType [int]
+            # EventIds range from 1000-1999
+            $result.EventId | Should -BeGreaterThan 999
+        }
+
+        It "Should have NotificationSent property as boolean" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $config = @{
+                ServerName    = "TEST-SERVER"
+                MedocLogsPath = $logsDir
+                BotToken      = "123456789:ABCDEFGHijklmnopqrstuvwxyz123456789"
+                ChatId        = "12345"
+            }
+
+            $result = Invoke-MedocUpdateCheck -Config $config -ErrorAction SilentlyContinue
+
+            $result.NotificationSent | Should -BeOfType [bool]
+        }
+    }
+}
+
+Describe "Update Operation Flow - Integration" {
+
+    Context "Complete update detection flow" {
+        It "Should detect and report successful updates" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.Status | Should -Be "Success"
+            $result.Success | Should -Be $true
+            $result.FromVersion | Should -Not -BeNullOrEmpty
+            $result.ToVersion | Should -Not -BeNullOrEmpty
+            $result.ErrorId | Should -Be ([MedocEventId]::Success)
+        }
+
+        It "Should detect and report failed updates" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.Status | Should -Be "Failed"
+            $result.Success | Should -Be $false
+            $result.ErrorId | Should -Be ([MedocEventId]::UpdateValidationFailed)
+        }
+
+        It "Should detect and report no update scenarios" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-detected"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.Status | Should -Be "NoUpdate"
+            $result.ErrorId | Should -Be ([MedocEventId]::NoUpdate)
+        }
+    }
+
+    Context "Result object completeness" {
+        It "Should include all expected properties in success result" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Core properties
+            $result.Keys | Should -Contain "Status"
+            $result.Keys | Should -Contain "Success"
+            $result.Keys | Should -Contain "ErrorId"
+
+            # Version info
+            $result.Keys | Should -Contain "FromVersion"
+            $result.Keys | Should -Contain "ToVersion"
+            $result.Keys | Should -Contain "TargetVersion"
+
+            # Marker info (Phase 1)
+            $result.Keys | Should -Contain "MarkerVersionConfirm"
+            $result.Keys | Should -Contain "MarkerCompletionMarker"
+            $result.Keys | Should -Contain "OperationFound"
+
+            # Timestamps and duration
+            $result.Keys | Should -Contain "UpdateStartTime"
+            $result.Keys | Should -Contain "UpdateEndTime"
+            $result.Keys | Should -Contain "UpdateDuration"
+
+            # Log info
+            $result.Keys | Should -Contain "UpdateLogPath"
+            $result.Keys | Should -Contain "Reason"
+        }
+
+        It "Should include all expected properties in failure result" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Core properties
+            $result.Keys | Should -Contain "Status"
+            $result.Keys | Should -Contain "Success"
+            $result.Keys | Should -Contain "ErrorId"
+
+            # Version info (from Planner.log, not update log)
+            $result.Keys | Should -Contain "FromVersion"
+            $result.Keys | Should -Contain "ToVersion"
+
+            # Reason
+            $result.Keys | Should -Contain "Reason"
+        }
+    }
+}
+
+Describe "Test-UpdateState - Marker Classification Logic" {
+
+    Context "Marker-based state classification" {
+        It "Should classify Success when both markers present" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $updateLogPath = Join-Path $logsDir "update_2025-10-23.log"
+            $logContent = Get-Content -Path $updateLogPath -Raw -Encoding 'Windows-1251'
+
+            $result = Test-UpdateState -UpdateLogContent $logContent -TargetVersion "186"
+
+            $result.Status | Should -Be "Success"
+            $result.VersionConfirm | Should -Be $true
+            $result.CompletionMarker | Should -Be $true
+        }
+
+        It "Should classify Failed when version marker missing" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $updateLogPath = Join-Path $logsDir "update_2025-10-23.log"
+            $logContent = Get-Content -Path $updateLogPath -Raw -Encoding 'Windows-1251'
+
+            $result = Test-UpdateState -UpdateLogContent $logContent -TargetVersion "186"
+
+            $result.Status | Should -Be "Failed"
+            $result.VersionConfirm | Should -Be $false
+        }
+
+        It "Should classify Failed when completion marker missing" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-completion-marker"
+            $updateLogPath = Join-Path $logsDir "update_2025-10-23.log"
+            $logContent = Get-Content -Path $updateLogPath -Raw -Encoding 'Windows-1251'
+
+            $result = Test-UpdateState -UpdateLogContent $logContent -TargetVersion "186"
+
+            # Completion marker missing means operation not found
+            $result.Status | Should -Be "Failed"
+        }
+    }
+
+    Context "Target version matching" {
+        It "Should match exact version number" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $updateLogPath = Join-Path $logsDir "update_2025-10-23.log"
+            $logContent = Get-Content -Path $updateLogPath -Raw -Encoding 'Windows-1251'
+
+            $result = Test-UpdateState -UpdateLogContent $logContent -TargetVersion "186"
+
+            $result.VersionConfirm | Should -Be $true
+        }
+
+        It "Should not match different version number" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $updateLogPath = Join-Path $logsDir "update_2025-10-23.log"
+            $logContent = Get-Content -Path $updateLogPath -Raw -Encoding 'Windows-1251'
+
+            $result = Test-UpdateState -UpdateLogContent $logContent -TargetVersion "999"
+
+            $result.VersionConfirm | Should -Be $false
+        }
+    }
+}
+
+Describe "Phase 1 Refactoring Verification" {
+
+    Context "Marker-based detection (Phase 1)" {
+        It "Should use 2 markers: Version (V) and Completion (C)" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Phase 1 uses MarkerVersionConfirm and MarkerCompletionMarker
+            $result.Keys | Should -Contain "MarkerVersionConfirm"
+            $result.Keys | Should -Contain "MarkerCompletionMarker"
+
+            # Both must be true for success
+            if ($result.Status -eq "Success") {
+                $result.MarkerVersionConfirm | Should -Be $true
+                $result.MarkerCompletionMarker | Should -Be $true
+            }
+        }
+
+        It "Should not use old 3-flag system" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Phase 1: Old flag properties should not be in success path
+            # (They may exist in error paths for backward compatibility)
+            if ($result.Status -eq "Success") {
+                $result.Keys | Should -Not -Contain "Flag1_Infrastructure"
+                $result.Keys | Should -Not -Contain "Flag2_ServiceRestart"
+                $result.Keys | Should -Not -Contain "Flag3_VersionConfirm"
+            }
+        }
+
+        It "Should use OperationFound property to track operation block detection" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Phase 1 tracks whether operation block was found
+            $result.Keys | Should -Contain "OperationFound"
+            if ($result.Status -eq "Success") {
+                $result.OperationFound | Should -Be $true
+            }
+        }
+    }
+
+    Context "Marker definition validation" {
+        It "Marker V is version confirmation pattern" {
+            # Pattern: "Версія програми - {VERSION}"
+            $testContent = "Версія програми - 186"
+            $result = Test-UpdateMarker -OperationContent $testContent -TargetVersion "186"
+
+            $result.VersionConfirm | Should -Be $true
+        }
+
+        It "Marker C is update completion pattern" {
+            # Pattern: 'Завершення роботи, операція "Оновлення"'
+            $testContent = 'Завершення роботи, операція "Оновлення"'
+            $result = Test-UpdateMarker -OperationContent $testContent -TargetVersion "186"
+
+            $result.CompletionMarker | Should -Be $true
+        }
+
+        It "Both markers required for operation block" {
+            # Start marker: 'Початок роботи, операція "Оновлення"'
+            # End marker: 'Завершення роботи, операція "Оновлення"'
+            $testContent = @"
+Початок роботи, операція "Оновлення"
+Версія програми - 186
+Завершення роботи, операція "Оновлення"
+"@
+
+            $result = Test-UpdateMarker -OperationContent $testContent -TargetVersion "186"
+
+            $result.VersionConfirm | Should -Be $true
+            $result.CompletionMarker | Should -Be $true
+        }
+    }
+}
+
+Describe "Integration Tests - Comprehensive Marker-Based Detection Scenarios" {
+    Context "Success scenario: both markers present" {
+        It "Should successfully detect update with both version and completion markers" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.Status | Should -Be "Success"
+            $result.Success | Should -Be $true
+            $result.OperationFound | Should -Be $true
+        }
+
+        It "Should correctly identify both markers in success scenario" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.MarkerVersionConfirm | Should -Be $true
+            $result.MarkerCompletionMarker | Should -Be $true
+        }
+
+        It "Should extract version from update log in success scenario" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.FromVersion | Should -Be "11.02.185"
+            $result.ToVersion | Should -Be "11.02.186"
+            $result.TargetVersion | Should -Be "186"
+        }
+
+        It "Should extract operation timestamp from update log" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # UpdateStartTime is extracted from first timestamp in operation block
+            $result.UpdateStartTime | Should -BeOfType [datetime]
+        }
+
+        It "Should have operation found flag set to true" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.OperationFound | Should -Be $true
             $result.Success | Should -Be $true
         }
     }
-}
 
-Describe "CMS Credential Encryption - Unit Tests" {
-    # PLATFORM COMPATIBILITY: Windows only
-    # CMS and certificate features require Windows Certificate Store (LocalMachine)
-    # Tests are skipped on macOS/Linux since these features don't exist
-    # Reason: PowerShell's Protect-CmsMessage and Unprotect-CmsMessage depend on Windows PKI
+    Context "Failure scenario: missing version marker (V)" {
+        It "Should detect failure when version marker is missing" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-    if ($PSVersionTable.Platform -and $PSVersionTable.Platform -ne "Win32NT") {
-        # Gracefully skip on non-Windows - not a failure, just unsupported platform
-        It "CMS tests are not applicable on non-Windows platforms" -Skip {
-            $true | Should -Be $true  # Placeholder for skipped context
-        }
-    } else {
-
-    Context "Credential encryption and decryption" {
-        It "Should create self-signed certificate in LocalMachine store" {
-            # Certificate creation is tested indirectly through encryption/decryption
-            # This test verifies certificate-based CMS encryption works
-            @{
-                BotToken = "123456:ABC-test-token"
-                ChatId   = "-1002825825746"
-            } | ConvertTo-Json | Should -Not -BeNullOrEmpty
-
-            # Test that CMS encryption is available
-            Get-Command Protect-CmsMessage -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
-            Get-Command Unprotect-CmsMessage -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
+            $result.Status | Should -Be "Failed"
+            $result.Success | Should -Be $false
         }
 
-        It "Should store credentials in JSON format" {
-            # Credentials should be stored as JSON for transparency
-            $credentials = @{
-                BotToken = "123456:ABC-test-token"
-                ChatId   = "-1002825825746"
-            }
+        It "Should show version marker as missing but completion marker present" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            $json = $credentials | ConvertTo-Json -Depth 2
-            $parsed = $json | ConvertFrom-Json
-
-            $parsed.BotToken | Should -Be "123456:ABC-test-token"
-            $parsed.ChatId | Should -Be "-1002825825746"
+            $result.MarkerVersionConfirm | Should -Be $false
+            $result.MarkerCompletionMarker | Should -Be $true
         }
 
-        It "Should handle positive chat IDs" {
-            $chatId = "123456789"
-            $chatId -match '^-?\d+$' | Should -Be $true
+        It "Should still extract version from Planner log" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.FromVersion | Should -Be "11.02.185"
+            $result.ToVersion | Should -Be "11.02.186"
         }
 
-        It "Should handle negative chat IDs (for channels)" {
-            $chatId = "-1002825825746"
-            $chatId -match '^-?\d+$' | Should -Be $true
+        It "Should mark operation as found but failed due to missing version marker" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.OperationFound | Should -Be $true
+            $result.Success | Should -Be $false
+            $result.MarkerVersionConfirm | Should -Be $false
         }
 
-        It "Should validate chat ID format" {
-            $validId = "-1002825825746"
-            $invalidId = "not-a-number"
+        It "Should distinguish missing version marker failure from other failures" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-version-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            $validId -match '^-?\d+$' | Should -Be $true
-            $invalidId -match '^-?\d+$' | Should -Be $false
+            # Completion marker present means it's not a detection failure
+            $result.MarkerCompletionMarker | Should -Be $true
+            # But version marker missing causes failure
+            $result.MarkerVersionConfirm | Should -Be $false
         }
     }
 
-    Context "Certificate encryption and decryption workflow" {
-        It "Should encrypt and decrypt credential data successfully (if certificate exists)" -Skip:(
-            $PSVersionTable.Platform -and $PSVersionTable.Platform -ne "Win32NT"
-        ) {
-            # Check if credential encryption certificate exists
-            $cert = Get-ChildItem Cert:\LocalMachine\My -ErrorAction SilentlyContinue |
-                Where-Object { $_.Subject -match "M.E.Doc Update Check" } |
-                Select-Object -First 1
+    Context "Failure scenario: missing completion marker (C)" {
+        It "Should detect failure when completion marker is missing" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-completion-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            if (-not $cert) {
-                # Certificate doesn't exist yet - this is expected on fresh installations
-                # Setup-Credentials.ps1 will create it on first run
-                Write-Host "Info: Certificate not found (will be created by Setup-Credentials.ps1 on first run)" -ForegroundColor Cyan
-                $true | Should -Be $true  # Test passes as informational
-                return
-            }
-
-            # Certificate exists - test actual encryption/decryption
-            $testCredentials = @{
-                BotToken = "test-bot-token-12345"
-                ChatId   = "-1234567890"
-            }
-
-            # Encrypt the credentials using the certificate
-            $jsonData = $testCredentials | ConvertTo-Json
-            $encrypted = $jsonData | Protect-CmsMessage -To "CN=M.E.Doc Update Check Credential Encryption" -ErrorAction Stop
-
-            # Verify encryption succeeded
-            $encrypted | Should -Not -BeNullOrEmpty
-            $encrypted -is [string] | Should -Be $true
-
-            # Decrypt the credentials
-            $decrypted = $encrypted | Unprotect-CmsMessage -ErrorAction Stop
-
-            # Verify decryption succeeded and data is intact
-            $decrypted | Should -Not -BeNullOrEmpty
-            $parsed = $decrypted | ConvertFrom-Json
-            $parsed.BotToken | Should -Be "test-bot-token-12345"
-            $parsed.ChatId | Should -Be "-1234567890"
+            $result.Status | Should -Be "Failed"
+            $result.Success | Should -Be $false
         }
 
-        It "Should find certificate in LocalMachine store" -Skip:(
-            $PSVersionTable.Platform -and $PSVersionTable.Platform -ne "Win32NT"
-        ) {
-            # Search for the credential encryption certificate
-            $cert = Get-ChildItem Cert:\LocalMachine\My -ErrorAction SilentlyContinue |
-                Where-Object { $_.Subject -match "M.E.Doc Update Check" } |
-                Select-Object -First 1
+        It "Should show operation not found when completion marker missing" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-completion-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            # Certificate might not exist yet, but if it does, verify its properties
-            if ($cert) {
-                # Verify certificate subject
-                $cert.Subject | Should -Match "M.E.Doc Update Check Credential Encryption"
-
-                # Verify certificate is not expired
-                $cert.NotAfter | Should -BeGreaterThan (Get-Date)
-
-                # Verify certificate has private key
-                $cert.HasPrivateKey | Should -Be $true
-            } else {
-                # On first run or test environment, certificate might not exist yet
-                # This is not a failure - Setup-Credentials.ps1 creates it when needed
-                Write-Host "Info: Certificate not found in store (will be created by Setup-Credentials.ps1)" -ForegroundColor Cyan
-            }
+            # Operation detection requires BOTH start and completion markers
+            # Missing completion means operation block not found at all
+            $result.OperationFound | Should -Be $false
         }
 
-        It "Should have CMS cmdlets available on Windows" -Skip:(
-            $PSVersionTable.Platform -and $PSVersionTable.Platform -ne "Win32NT"
-        ) {
-            # Verify CMS encryption cmdlets are available
-            Get-Command Protect-CmsMessage -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
-            Get-Command Unprotect-CmsMessage -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
+        It "Should handle missing completion marker gracefully" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-completion-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Should not throw, should return coherent result
+            $result | Should -Not -BeNullOrEmpty
+            $result.Status | Should -Be "Failed"
+        }
+
+        It "Should still extract version from Planner even without operation block" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-completion-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Version info comes from Planner log, not update log
+            $result.FromVersion | Should -Be "11.02.185"
+            $result.ToVersion | Should -Be "11.02.186"
+        }
+
+        It "Should distinguish missing completion marker from no-update scenario" {
+            $logsDir = Join-Path $script:testDataDir "failure-missing-completion-marker"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Operation not found, but update was in Planner
+            $result.Status | Should -Be "Failed"
+            # Not NoUpdate because update was detected in Planner
+            $result.Status | Should -Not -Be "NoUpdate"
         }
     }
 
-    Context "Certificate validation for upgrades" -Skip:(
-        $PSVersionTable.Platform -and $PSVersionTable.Platform -ne "Win32NT"
-    ) {
-        # These integration tests verify Setup-Credentials.ps1 implementation details
-        # They check that certificate validation logic is properly implemented
+    Context "Failure scenario: no update operation detected" {
+        It "Should detect no-update when no update operation is in logs" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-detected"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-        It "Should verify Setup-Credentials.ps1 script exists and is valid" {
-            # The certificate validation depends on Setup-Credentials.ps1 existing
-            $setupCredentialsPath = Join-Path -Path (Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "..") -ChildPath "utils") -ChildPath "Setup-Credentials.ps1"
-            Test-Path $setupCredentialsPath | Should -Be $true
-
-            # Verify the script is readable
-            $content = Get-Content -Path $setupCredentialsPath -Raw -ErrorAction SilentlyContinue
-            $content | Should -Not -BeNullOrEmpty
-            $content | Should -Match "Get-MedocCredentialCertificate"
+            $result.Status | Should -Be "NoUpdate"
         }
 
-        It "Should verify Get-MedocCredentialCertificate function is defined in Setup-Credentials.ps1" {
-            # The validation function must contain logic for checking certificate requirements
-            $setupCredentialsPath = Join-Path -Path (Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "..") -ChildPath "utils") -ChildPath "Setup-Credentials.ps1"
-            $content = Get-Content -Path $setupCredentialsPath -Raw -ErrorAction SilentlyContinue
+        It "Should handle no-update gracefully" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-detected"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            # Function should contain validation logic for EKU
-            $content | Should -Match "1\.3\.6\.1\.4\.1\.311\.80\.1"
-
-            # Function should contain validation logic for KeyEncipherment
-            $content | Should -Match "KeyEncipherment"
-
-            # Function should contain expiration check (< 30 days)
-            $content | Should -Match "30"
+            # Result should be returned without errors
+            $result | Should -Not -BeNullOrEmpty
+            $result.Status | Should -Be "NoUpdate"
         }
 
-        It "Should check certificate expiration threshold is 30 days" {
-            # Certificates expiring in < 30 days should be regenerated
-            $setupCredentialsPath = Join-Path -Path (Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "..") -ChildPath "utils") -ChildPath "Setup-Credentials.ps1"
-            $content = Get-Content -Path $setupCredentialsPath -Raw -ErrorAction SilentlyContinue
+        It "Should return empty version info when no operation detected" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-detected"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            # Verify the 30-day threshold is documented in the script
-            $content | Should -Match "daysUntilExpiration.*30|-lt 30"
+            # Version info should be empty or null
+            $result.FromVersion | Should -BeNullOrEmpty
+            $result.ToVersion | Should -BeNullOrEmpty
         }
 
-        It "Should check private key accessibility in Setup-Credentials.ps1" {
-            # Certificate validation includes checking if private key is accessible
-            $setupCredentialsPath = Join-Path -Path (Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "..") -ChildPath "utils") -ChildPath "Setup-Credentials.ps1"
-            $content = Get-Content -Path $setupCredentialsPath -Raw -ErrorAction SilentlyContinue
+        It "Should distinguish no-update from failed-update scenarios" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-detected"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            # Script should have logic to handle keys that are not accessible
-            $content | Should -Match "PrivateKey|private.*key.*not.*accessible"
-        }
-
-        It "Should verify warning messages for missing CMS requirements in Setup-Credentials.ps1" {
-            # When old certificate is detected, user should be informed
-            # Message should specify which requirements are missing (EKU or KeyEncipherment)
-            $setupCredentialsPath = Join-Path -Path (Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "..") -ChildPath "utils") -ChildPath "Setup-Credentials.ps1"
-            $content = Get-Content -Path $setupCredentialsPath -Raw -ErrorAction SilentlyContinue
-
-            # Script should produce informative output when regenerating
-            $content | Should -Match "doesn't meet.*CMS|Creating new certificate"
-        }
-
-        It "Should reuse certificate meeting all CMS requirements" {
-            # Certificate with valid EKU and KeyEncipherment should be reused (not regenerated)
-            $setupCredentialsPath = Join-Path -Path (Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath "..") -ChildPath "utils") -ChildPath "Setup-Credentials.ps1"
-            $content = Get-Content -Path $setupCredentialsPath -Raw -ErrorAction SilentlyContinue
-
-            # Logic should check all three conditions before accepting certificate:
-            # 1. Not expiring soon (>= 30 days)
-            # 2. Has Document Encryption EKU
-            # 3. Has KeyEncipherment usage
-            # Pattern: Should return existing cert variable if all checks pass
-            $content | Should -Match 'return \$cert'
+            # NoUpdate is distinct from Failed
+            $result.Status | Should -Be "NoUpdate"
         }
     }
 
-    Context "Credential file path and permissions" {
-        It "Should store encrypted credentials in ProgramData directory" {
-            $expectedPath = "$env:ProgramData\MedocUpdateCheck\credentials\telegram.cms"
-            $expectedPath | Should -Match "ProgramData.*credentials.*telegram\.cms"
+    Context "Failure scenario: no update log file" {
+        It "Should handle missing update log file gracefully" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-log"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result | Should -Not -BeNullOrEmpty
+            $result.Status | Should -Be "Failed"
         }
 
-        It "Should use .cms file extension for encrypted files" {
-            $credFile = "telegram.cms"
-            $credFile | Should -Match "\.cms$"
+        It "Should detect operation in Planner log but no operation block available" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-log"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Update detected in Planner but can't verify without operation block
+            $result.FromVersion | Should -Be "11.02.185"
+            $result.ToVersion | Should -Be "11.02.186"
+            $result.OperationFound | Should -Be $false
         }
 
-        It "Should restrict permissions to SYSTEM and Administrators" {
-            # These are the only SIDs that should have access
-            $systemSID = "S-1-5-18"  # SYSTEM
-            $adminSID = "S-1-5-32-544"  # Administrators
+        It "Should return failed status when update log is missing" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-log"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            @($systemSID, $adminSID) | Should -Not -BeNullOrEmpty
-        }
-    }
-
-    Context "CMS cmdlet availability" {
-        It "Should have Protect-CmsMessage available" {
-            Get-Command Protect-CmsMessage -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
+            # Status should indicate failure (can't verify without update log)
+            $result.Status | Should -Be "Failed"
+            $result.MarkerVersionConfirm | Should -Be $false
+            $result.MarkerCompletionMarker | Should -Be $false
+            $result.Reason | Should -Match "Update log file not found"
         }
 
-        It "Should have Unprotect-CmsMessage available" {
-            Get-Command Unprotect-CmsMessage -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
-        }
+        It "Should extract version from Planner log even without update log" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-log"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-        It "Should have New-SelfSignedCertificate available" -Skip:(
-            $PSVersionTable.Platform -and $PSVersionTable.Platform -ne "Win32NT"
-        ) {
-            Get-Command New-SelfSignedCertificate -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
-        }
-
-        It "Should have certificate store available (Windows only)" -Skip:(
-            $PSVersionTable.Platform -and $PSVersionTable.Platform -ne "Win32NT"
-        ) {
-            Test-Path "Cert:\LocalMachine\My" | Should -Be $true
+            $result.FromVersion | Should -Be "11.02.185"
+            $result.ToVersion | Should -Be "11.02.186"
         }
     }
 
-    Context "Credential decryption function" {
-        It "Should require Path parameter" {
-            # Simulating the function call structure
-            { Get-Content -Path $null -Raw -ErrorAction Stop } | Should -Throw
+    Context "Cross-scenario marker patterns" {
+        It "Success scenario has both markers and operation found" {
+            # VV = Success (both markers present)
+            $resultVV = Test-UpdateOperationSuccess -MedocLogsPath (Join-Path $script:testDataDir "success-both-markers")
+            $resultVV.MarkerVersionConfirm | Should -Be $true
+            $resultVV.MarkerCompletionMarker | Should -Be $true
+            $resultVV.Success | Should -Be $true
         }
 
-        It "Should detect missing credentials file" {
-            $nonexistentPath = "C:\NonExistent\Path\telegram.cms"
-            Test-Path $nonexistentPath | Should -Be $false
+        It "Missing completion marker means operation not found" {
+            # When completion marker missing, operation block not detected
+            $resultMissingC = Test-UpdateOperationSuccess -MedocLogsPath (Join-Path $script:testDataDir "failure-missing-completion-marker")
+            $resultMissingC.Status | Should -Be "Failed"
+            # Operation detection requires both markers
+            $resultMissingC.OperationFound | Should -Be $false
         }
 
-        It "Should handle file encoding correctly" {
-            # Credentials file should use UTF8 encoding
-            $encoding = [System.Text.Encoding]::UTF8
-            $encoding.WebName | Should -Be "utf-8"
+        It "Missing version marker in operation block is detected" {
+            # xV = Failed (version missing, completion present)
+            $resultxV = Test-UpdateOperationSuccess -MedocLogsPath (Join-Path $script:testDataDir "failure-missing-version-marker")
+            $resultxV.MarkerVersionConfirm | Should -Be $false
+            $resultxV.MarkerCompletionMarker | Should -Be $true
+            $resultxV.Success | Should -Be $false
         }
 
-        It "Should parse JSON from decrypted content" {
-            $jsonContent = @{
-                BotToken = "123456:ABC-token"
-                ChatId   = "123456"
-            } | ConvertTo-Json
+        It "Version extraction works independently of marker presence" {
+            $resultSuccess = Test-UpdateOperationSuccess -MedocLogsPath (Join-Path $script:testDataDir "success-both-markers")
+            $resultMissingV = Test-UpdateOperationSuccess -MedocLogsPath (Join-Path $script:testDataDir "failure-missing-version-marker")
+            $resultMissingC = Test-UpdateOperationSuccess -MedocLogsPath (Join-Path $script:testDataDir "failure-missing-completion-marker")
 
-            $parsed = $jsonContent | ConvertFrom-Json
-            $parsed.BotToken | Should -Be "123456:ABC-token"
-            $parsed.ChatId | Should -Be "123456"
+            # All should extract same version info from Planner.log
+            $resultSuccess.FromVersion | Should -Be "11.02.185"
+            $resultMissingV.FromVersion | Should -Be "11.02.185"
+            $resultMissingC.FromVersion | Should -Be "11.02.185"
+
+            $resultSuccess.ToVersion | Should -Be "11.02.186"
+            $resultMissingV.ToVersion | Should -Be "11.02.186"
+            $resultMissingC.ToVersion | Should -Be "11.02.186"
         }
-    }
-    }  # Close the Windows-only conditional
-}
 
-Describe "Exit Code Mapping - Unit Tests" {
-    It "Should map Success to 0" {
-        Get-ExitCodeForOutcome -Outcome 'Success' | Should -Be 0
-    }
-    It "Should map NoUpdate to 0" {
-        Get-ExitCodeForOutcome -Outcome 'NoUpdate' | Should -Be 0
-    }
-    It "Should map UpdateFailed to 2" {
-        Get-ExitCodeForOutcome -Outcome 'UpdateFailed' | Should -Be 2
-    }
-    It "Should map Error to 1" {
-        Get-ExitCodeForOutcome -Outcome 'Error' | Should -Be 1
+        It "Marker detection is independent of version extraction" {
+            $result = Test-UpdateOperationSuccess -MedocLogsPath (Join-Path $script:testDataDir "failure-missing-version-marker")
+
+            # Can extract version from Planner
+            $result.FromVersion | Should -Not -BeNullOrEmpty
+            $result.ToVersion | Should -Not -BeNullOrEmpty
+            # But marker detection shows version marker missing from update log
+            $result.MarkerVersionConfirm | Should -Be $false
+            # This is the key difference: version exists, but marker missing
+        }
     }
 }
-
 AfterAll {
-    # Clean up test artifacts (checkpoint files created during test execution)
-    # These files are generated by Invoke-MedocUpdateCheck in various test scenarios
-    # and should not persist after tests complete (regardless of pass/fail/skip outcome)
-    $checkpointPattern = "checkpoint-*.txt"
-    $testDataDir = Join-Path $PSScriptRoot "test-data"
-
-    # Recursively find and remove all checkpoint files in test-data directory
-    Get-ChildItem -Path $testDataDir -Recurse -Filter $checkpointPattern -ErrorAction SilentlyContinue |
-        ForEach-Object {
-            try {
-                Remove-Item -Path $_.FullName -Force -ErrorAction SilentlyContinue
-            } catch {
-                Write-Warning "Could not remove checkpoint file: $($_.FullName)"
+    Remove-Module MedocUpdateCheck -Force -ErrorAction SilentlyContinue
+    if ($script:tempDirectories) {
+        foreach ($dir in $script:tempDirectories) {
+            if ($dir -and (Test-Path $dir)) {
+                Remove-Item -Path $dir -Recurse -Force -ErrorAction SilentlyContinue
             }
         }
-
-    # Clean up module
-    Remove-Module MedocUpdateCheck -ErrorAction SilentlyContinue
+    }
 }

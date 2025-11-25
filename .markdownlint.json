@@ -4,5 +4,8 @@
     "code_blocks": false,
     "headings": false,
     "tables": false
+  },
+  "MD060": {
+    "style": "consistent"
   }
 }
