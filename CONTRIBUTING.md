@@ -198,14 +198,13 @@ Project Root/
 │   └── Validate-Scripts.ps1                  # Development: validate PowerShell syntax
 ├── tests/                                    # Comprehensive test suite
 │   ├── Run-Tests.ps1                         # Test runner script
-│   ├── MedocUpdateCheck.Tests.ps1            # Pester tests (105+ test cases)
+│   ├── MedocUpdateCheck.Tests.ps1            # Pester tests (164 test cases)
 │   └── test-data/                            # Test log scenarios (Windows-1251 encoded)
-│       ├── dual-log-success/                 # Successful update scenario
-│       ├── dual-log-no-update/               # No update detected
-│       ├── dual-log-missing-updatelog/       # Update log missing
-│       ├── dual-log-missing-flag1/           # Infrastructure flag missing
-│       ├── dual-log-missing-flag2/           # Service restart flag missing
-│       └── dual-log-missing-flag3/           # Version confirmation flag missing
+│       ├── success-both-markers/             # Both V and C markers present
+│       ├── failure-missing-version-marker/   # C present, V missing
+│       ├── failure-missing-completion-marker/# V present, C missing
+│       ├── failure-no-update-detected/       # No operation found
+│       └── failure-no-update-log/            # Only Planner.log, no update log
 ├── .github/
 │   └── workflows/
 │       └── tests.yml                         # CI/CD pipeline (GitHub Actions)
@@ -347,10 +346,9 @@ Project Root/
        TargetVersion          = "11.02.186"
        UpdateTime             = [datetime]"2025-07-29 05:00:59"
        UpdateLogPath          = "D:\MedocSRV\LOG\update_2025-07-29.log"
-       Flag1_Infrastructure   = $true
-       Flag2_ServiceRestart   = $true
-       Flag3_VersionConfirm   = $true
-       Reason                 = "All success flags confirmed"
+       MarkerVersionConfirm   = $true
+       MarkerCompletionMarker = $true
+       Reason                 = "Both markers confirmed"
    }
    ```
 
@@ -486,9 +484,9 @@ Describe "Test-UpdateOperationSuccess" {
         $script:testDataDir = Join-Path $PSScriptRoot "test-data"
     }
 
-    It "Should detect successful update from dual logs" {
+    It "Should detect successful update with both markers" {
         # Arrange
-        $logsPath = Join-Path $script:testDataDir "dual-log-success"
+        $logsPath = Join-Path $script:testDataDir "success-both-markers"
 
         # Act
         $result = Test-UpdateOperationSuccess -MedocLogsPath $logsPath
@@ -1289,13 +1287,12 @@ function Test-UpdateOperationSuccess {
 
     .OUTPUTS
         [System.Collections.Hashtable] with keys:
-        - Success: [bool] Update completed successfully with all flags
+        - Success: [bool] Update completed successfully with both markers
         - TargetVersion: [string] Updated version number (e.g., "11.02.186")
         - UpdateTime: [datetime] When update started in Planner.log
         - UpdateLogPath: [string] Path to the update_YYYY-MM-DD.log file
-        - Flag1_Infrastructure: [bool] Infrastructure ready flag
-        - Flag2_ServiceRestart: [bool] Service restart flag
-        - Flag3_VersionConfirm: [bool] Version confirmation flag
+        - MarkerVersionConfirm: [bool] Version marker found
+        - MarkerCompletionMarker: [bool] Completion marker found
         - Reason: [string] Human-readable status message
 
         Always returns a hashtable with Status/ErrorId/Success properties.
@@ -1305,7 +1302,7 @@ function Test-UpdateOperationSuccess {
         $result = Test-UpdateOperationSuccess -MedocLogsPath "D:\MedocSRV\LOG"
         if ($result.Success) {
             Write-Host "Update to version $($result.TargetVersion) succeeded"
-            Write-Host "All validation flags confirmed: $($result.Reason)"
+            Write-Host "All required markers confirmed: $($result.Reason)"
         }
     #>
     param(
@@ -1467,9 +1464,9 @@ Describe "Test-UpdateOperationSuccess" {
     }
 
     Context "Successful Update Scenarios" {
-        It "Should detect successful update from dual logs" {
+        It "Should detect successful update with both markers" {
             # Arrange
-            $logsPath = Join-Path $script:testDataDir "dual-log-success"
+            $logsPath = Join-Path $script:testDataDir "success-both-markers"
 
             # Act
             $result = Test-UpdateOperationSuccess -MedocLogsPath $logsPath
@@ -1477,14 +1474,13 @@ Describe "Test-UpdateOperationSuccess" {
             # Assert
             $result | Should -Not -BeNullOrEmpty
             $result.Success | Should -Be $true
-            $result.Flag1_Infrastructure | Should -Be $true
-            $result.Flag2_ServiceRestart | Should -Be $true
-            $result.Flag3_VersionConfirm | Should -Be $true
+            $result.MarkerVersionConfirm | Should -Be $true
+            $result.MarkerCompletionMarker | Should -Be $true
         }
 
         It "Should extract correct version string" {
             # Arrange
-            $logsPath = Join-Path $script:testDataDir "dual-log-success"
+            $logsPath = Join-Path $script:testDataDir "success-both-markers"
 
             # Act
             $result = Test-UpdateOperationSuccess -MedocLogsPath $logsPath
@@ -1514,29 +1510,27 @@ Describe "Test-UpdateOperationSuccess" {
 ```markdown
 ## Testing Update Detection
 
-To test the update detection logic, use the dual-log test data:
+To test the update detection logic, use the 2-marker test data:
 
 ```powershell
 $result = Test-UpdateOperationSuccess `
-    -MedocLogsPath ".\tests\test-data\dual-log-success" `
+    -MedocLogsPath ".\tests\test-data\success-both-markers" `
     -EncodingCodePage 1251
 
 Write-Host "Update detected: $($result.Success)"
 Write-Host "Version: $($result.TargetVersion)"
-Write-Host "All flags confirmed: $($result.Flag1_Infrastructure -and $result.Flag2_ServiceRestart -and $result.Flag3_VersionConfirm)"
+Write-Host "All markers confirmed: $($result.MarkerVersionConfirm -and $result.MarkerCompletionMarker)"
 ```
 
 ### Test Scenarios
 
 | Scenario | Directory | Expected Result |
 |----------|-----------|-----------------|
-| Successful | dual-log-success | Status = "Success", all flags = $true |
-| No Updates | dual-log-no-update | Status = "NoUpdate", ErrorId = NoUpdate (1001) |
-| Missing Flag 1 | dual-log-missing-flag1 | Status = "Failed", Success = $false (infrastructure flag missing) |
-| Missing Flag 2 | dual-log-missing-flag2 | Status = "Failed", Success = $false (service restart flag missing) |
-| Missing Flag 3 | dual-log-missing-flag3 | Status = "Failed", Success = $false (version confirmation missing) |
-| Failed Update | dual-log-failed | Status = "Failed", Success = $false (update did not complete) |
-| Missing Log | dual-log-missing-updatelog | Status = "Failed", ErrorId = UpdateLogMissing (1201) |
+| Successful | success-both-markers | Status = "Success", all markers = $true |
+| No Updates | failure-no-update-detected | Status = "NoUpdate", ErrorId = NoUpdate (1001) |
+| Missing Version Marker | failure-missing-version-marker | Status = "Failed", Success = $false (version marker missing) |
+| Missing Completion Marker | failure-missing-completion-marker | Status = "Failed", Success = $false (completion marker missing) |
+| No Update Log | failure-no-update-log | Status = "NoUpdate" or "Failed" (no update_*.log file) |
 
 ---
 

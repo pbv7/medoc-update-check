@@ -695,10 +695,7 @@ Event IDs are organized by category for easy filtering and monitoring in Windows
 
 | ID | Level | Scenario | Meaning | Action |
 |---|---|---|---|---|
-| **1300** | Error | ❌ Flag 1 Failed | Infrastructure validation missing (IsProcessCheckPassed DI/AI) | Check M.E.Doc infrastructure components |
-| **1301** | Error | ❌ Flag 2 Failed | Service restart unconfirmed (ZvitGrp startup) | Check service restart logs |
-| **1302** | Error | ❌ Flag 3 Failed | Version not confirmed (version mismatch) | Verify update log completion |
-| **1303** | Error | ❌ Multiple Flags Failed | Multiple flags missing | Full investigation required |
+| **1302** | Error | ❌ Failed | Update validation failed (missing markers) | Verify update log contains both version and completion markers |
 
 #### Notification Errors (1400-1499)
 
@@ -743,10 +740,9 @@ Filesystem errors (1200-1299):
 
 Update validation failures (1300-1399):
 
-- **1300** - Flag 1 failed (infrastructure): Review M.E.Doc infrastructure components (DI/AI)
-- **1301** - Flag 2 failed (service): Check ZvitGrp service restart logs
-- **1302** - Flag 3 failed (version): Verify update log completion and version match
-- **1303** - Multiple flags failed: Full investigation of update process
+- **1302** - Update validation failed: Verify update log contains both version confirmation marker
+  (`Версія програми - {VERSION}`) and completion marker
+  (`Завершення роботи, операція "Оновлення"`)
 
 Notification errors (1400-1499):
 

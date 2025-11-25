@@ -379,7 +379,7 @@ Before committing documentation changes, verify:
 # 1. Event ID consistency check
 Write-Host "Checking Event ID consistency..."
 $eventIds = @(1000, 1001, 1100, 1101, 1200, 1201, 1202, 1203, 1204,
-              1300, 1301, 1302, 1303, 1400, 1401, 1500, 1900)
+              1302, 1400, 1401, 1500, 1900)
 foreach ($id in $eventIds) {
     $readmeMatches = (Get-Content README.md | Select-String $id `
         | Measure-Object).Count
@@ -424,3 +424,10 @@ Get-Content *.md | Select-String '(74 tests|265 lines|test count|total tests)' `
 
 - See [AGENTS-TOOLS-AND-WORKFLOW.md](AGENTS-TOOLS-AND-WORKFLOW.md) for git workflow
 - See [AGENTS-CODE-STANDARDS.md](AGENTS-CODE-STANDARDS.md) for code standards
+
+## Analysis Sources
+
+- Consolidated rationale and research live under `docs/analysis/`:
+  - [docs/analysis/update-detection-rationale.md](docs/analysis/update-detection-rationale.md)
+  - [docs/analysis/implementation-plan-phase1.md](docs/analysis/implementation-plan-phase1.md)
+  - [docs/analysis/log-corpus-summary.md](docs/analysis/log-corpus-summary.md)
