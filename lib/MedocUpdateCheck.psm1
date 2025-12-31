@@ -20,7 +20,7 @@ Import-Module (Join-Path $PSScriptRoot "ConfigValidation.psm1") -Force
 # Each range represents a category of events for easy filtering and monitoring
 enum MedocEventId {
     # 1000-1099: Normal flow (operational, not errors)
-    Success = 1000                          # ✅ Update successful (all 3 flags confirmed)
+    Success = 1000                          # ✅ Update successful (both markers confirmed)
     NoUpdate = 1001                         # ℹ️ No update detected (normal, no updates since last check)
 
     # 1100-1199: Configuration errors
@@ -34,11 +34,8 @@ enum MedocEventId {
     CheckpointDirCreationFailed = 1203      # ❌ Checkpoint directory creation failed
     EncodingError = 1204                    # ❌ Encoding error reading logs
 
-    # 1300-1399: Update/flag validation failures
-    Flag1Failed = 1300                      # ❌ Flag 1 missing (Infrastructure validation failed)
-    Flag2Failed = 1301                      # ❌ Flag 2 missing (Service restart failed)
-    Flag3Failed = 1302                      # ❌ Flag 3 missing (Version confirmation failed)
-    MultipleFlagsFailed = 1303              # ❌ Multiple flags missing
+    # 1300-1399: Update/marker validation failures
+    UpdateValidationFailed = 1302           # ❌ Update failed (Missing version or completion marker)
 
     # 1400-1499: Notification/communication errors
     TelegramAPIError = 1400                 # ❌ Telegram API error
@@ -135,18 +132,11 @@ function Format-UpdateTelegramMessage {
 
             return "✅ UPDATE OK | $ServerName`nVersion: $($UpdateResult.FromVersion) → $($UpdateResult.ToVersion)`nStarted: $startTimeStr`nCompleted: $endTimeStr$durationStr`nChecked: $CheckTime"
         } else {
-            # FAILURE case: Show which flags failed
-            $flags = @()
-            if (-not $UpdateResult.Flag1_Infrastructure) { $flags += "✗ Infrastructure (DI/AI)" }
-            if (-not $UpdateResult.Flag2_ServiceRestart) { $flags += "✗ Service Restart (ZvitGrp)" }
-            if (-not $UpdateResult.Flag3_VersionConfirm) { $flags += "✗ Version Confirmed" }
-
-            $flagsStr = if ($flags.Count -gt 0) { "`nValidation Failures: " + ($flags -join ", ") } else { "" }
-
+            # FAILURE case: Generic failure message without marker details
             $startTimeStr = if ($UpdateResult.UpdateStartTime) { $UpdateResult.UpdateStartTime.ToString('dd.MM.yyyy HH:mm:ss') } else { "N/A" }
             $failedTimeStr = if ($UpdateResult.UpdateEndTime) { $UpdateResult.UpdateEndTime.ToString('dd.MM.yyyy HH:mm:ss') } else { "N/A" }
 
-            return "❌ UPDATE FAILED | $ServerName`nVersion: $($UpdateResult.FromVersion) → $($UpdateResult.ToVersion)`nStarted: $startTimeStr`nFailed at: $failedTimeStr$flagsStr`nReason: $($UpdateResult.Reason)`nChecked: $CheckTime"
+            return "❌ UPDATE FAILED | $ServerName`nVersion: $($UpdateResult.FromVersion) → $($UpdateResult.ToVersion)`nStarted: $startTimeStr`nFailed at: $failedTimeStr`nReason: $($UpdateResult.Reason)`nChecked: $CheckTime"
         }
     } else {
         # Legacy: $null case (should not happen with new code, but kept for safety)
@@ -193,15 +183,246 @@ function Format-UpdateEventLogMessage {
             $endTimeStr = if ($UpdateResult.UpdateEndTime) { $UpdateResult.UpdateEndTime.ToString('dd.MM.yyyy HH:mm:ss') } else { "N/A" }
             return "Server=$ServerName | Status=UPDATE_OK | FromVersion=$($UpdateResult.FromVersion) | ToVersion=$($UpdateResult.ToVersion) | UpdateStarted=$startTimeStr | UpdateCompleted=$endTimeStr | Duration=$($UpdateResult.UpdateDuration) | CheckTime=$CheckTime"
         } else {
-            # FAILURE case: Include flag details
-            $flagsStr = "Flag1=$($UpdateResult.Flag1_Infrastructure) | Flag2=$($UpdateResult.Flag2_ServiceRestart) | Flag3=$($UpdateResult.Flag3_VersionConfirm)"
+            # FAILURE case: Include marker details for automated alerting, include reason
             $startTime = if ($UpdateResult.UpdateStartTime) { $UpdateResult.UpdateStartTime.ToString('dd.MM.yyyy HH:mm:ss') } else { "N/A" }
+            $markerDetails = "MarkerV=$($UpdateResult.MarkerVersionConfirm) | MarkerC=$($UpdateResult.MarkerCompletionMarker) | OpFound=$($UpdateResult.OperationFound)"
 
-            return "Server=$ServerName | Status=UPDATE_FAILED | FromVersion=$($UpdateResult.FromVersion) | ToVersion=$($UpdateResult.ToVersion) | UpdateStarted=$startTime | $flagsStr | Reason=$($UpdateResult.Reason) | CheckTime=$CheckTime"
+            return "Server=$ServerName | Status=UPDATE_FAILED | FromVersion=$($UpdateResult.FromVersion) | ToVersion=$($UpdateResult.ToVersion) | UpdateStarted=$startTime | $markerDetails | Reason=$($UpdateResult.Reason) | CheckTime=$CheckTime"
         }
     } else {
         # Legacy: $null case (should not happen with new code, but kept for safety)
         return "Server=$ServerName | Status=NO_UPDATE | CheckTime=$CheckTime"
+    }
+}
+
+function Find-LastUpdateOperation {
+    <#
+    .SYNOPSIS
+        Locates the last (most recent) update operation block in log content
+
+    .DESCRIPTION
+        Searches backward from the end of the log file to find the most recent
+        update operation. Handles logs that may contain multiple update operations
+        by returning only the last one.
+
+    .PARAMETER UpdateLogContent
+        Full content of the update log file as a string
+
+    .OUTPUTS
+        Hashtable with the following keys:
+        - Found: $true if operation markers found, $false otherwise
+        - StartPosition: Index where operation begins (or $null if not found)
+        - EndPosition: Index where operation ends (or $null if not found)
+        - Content: The operation block content (or empty string if not found)
+
+    .NOTES
+        Search strategy:
+        1. Search backward from end for: 'Завершення роботи, операція "Оновлення"'
+        2. Record end position
+        3. Search backward from end position for: 'Початок роботи, операція "Оновлення"'
+        4. Record start position
+        5. Extract content between markers
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$UpdateLogContent
+    )
+
+    $startMarker = 'Початок роботи, операція "Оновлення"'
+    $endMarker = 'Завершення роботи, операція "Оновлення"'
+
+    # Find the LAST start marker
+    $lastStartPosition = $UpdateLogContent.LastIndexOf($startMarker)
+
+    if ($lastStartPosition -eq -1) {
+        # No operation found
+        return @{
+            Found        = $false
+            StartPosition = $null
+            EndPosition  = $null
+            Content      = ""
+        }
+    }
+
+    # Check if there's a completion marker AFTER the last start marker
+    $contentAfterStart = $UpdateLogContent.Substring($lastStartPosition)
+    $completionRelativePosition = $contentAfterStart.IndexOf($endMarker)
+
+    if ($completionRelativePosition -eq -1) {
+        # Incomplete operation: start without completion
+        $operationContent = $contentAfterStart
+        return @{
+            Found        = $true
+            StartPosition = $lastStartPosition
+            EndPosition  = $UpdateLogContent.Length
+            Content      = $operationContent
+        }
+    }
+
+    # Complete operation: both markers present
+    $completionPosition = $lastStartPosition + $completionRelativePosition
+    $operationEnd = $completionPosition + $endMarker.Length
+    $operationContent = $UpdateLogContent.Substring($lastStartPosition, $operationEnd - $lastStartPosition)
+
+    return @{
+        Found        = $true
+        StartPosition = $lastStartPosition
+        EndPosition  = $operationEnd
+        Content      = $operationContent
+    }
+}
+
+function Test-UpdateMarker {
+    <#
+    .SYNOPSIS
+        Validates presence of version confirmation (V) and completion (C) markers
+
+    .DESCRIPTION
+        Tests whether both required markers are present in the operation block:
+        - Marker V: Version confirmation ("Версія програми - {VERSION}")
+        - Marker C: Update completion ("Завершення роботи, операція \"Оновлення\"")
+
+    .PARAMETER OperationContent
+        Content of the update operation block (from Find-LastUpdateOperation)
+
+    .PARAMETER TargetVersion
+        Expected version number to match (e.g., "187" or "11.02.187")
+
+    .OUTPUTS
+        Hashtable with the following keys:
+        - VersionConfirm: $true if version marker present, $false otherwise
+        - CompletionMarker: $true if completion marker present, $false otherwise
+
+    .NOTES
+        This function ONLY validates marker presence. Determination of success/failure
+        (orchestration logic) is the responsibility of the caller.
+
+        Version matching uses word boundary (\b) to ensure exact matches.
+        For example, version "187" will NOT match "1870" or "2187".
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$OperationContent,
+
+        [Parameter(Mandatory = $true)]
+        [string]$TargetVersion
+    )
+
+    # Test for version marker with flexible whitespace and word boundary
+    # Pattern: "Версія" + flexible spaces + "програми" + optional spaces + "-" + optional spaces + version + word boundary
+    $versionPattern = "Версія\s+програми\s*-\s*$([regex]::Escape($TargetVersion))\b"
+    $hasVersionConfirm = $OperationContent -match $versionPattern
+
+    # Test for completion marker
+    $completionPattern = 'Завершення роботи, операція "Оновлення"'
+    $hasCompletionMarker = $OperationContent -match [regex]::Escape($completionPattern)
+
+    return @{
+        VersionConfirm    = $hasVersionConfirm
+        CompletionMarker  = $hasCompletionMarker
+    }
+}
+
+function Test-UpdateState {
+    <#
+    .SYNOPSIS
+        Tests update state by analyzing markers in the log file
+
+    .DESCRIPTION
+        Analyzes the full update log to determine if the update succeeded or failed.
+        Uses the two-marker system:
+        - Marker V: Version confirmation (Версія програми - {VERSION})
+        - Marker C: Update completion (Завершення роботи, операція "Оновлення")
+
+        Success requires BOTH markers to be present.
+
+    .PARAMETER UpdateLogContent
+        Full content of the update log file
+
+    .PARAMETER TargetVersion
+        Expected version number from the update operation
+
+    .OUTPUTS
+        Hashtable with the following keys:
+        - Status: "Success" or "Failed"
+        - VersionConfirm: $true if version marker present
+        - CompletionMarker: $true if completion marker present
+        - OperationFound: $true if operation block was located
+        - Message: Human-readable reason (success or failure reason)
+
+    .NOTES
+        Classification logic:
+        1. Locate the last update operation in the log
+        2. If no operation found → Status = "Failed"
+        3. Check for V and C markers in operation
+        4. If (V = true AND C = true) → Status = "Success"
+        5. Otherwise → Status = "Failed"
+
+        This function handles multiple operations correctly by evaluating
+        only the LAST operation (most recent).
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$UpdateLogContent,
+
+        [Parameter(Mandatory = $true)]
+        [string]$TargetVersion
+    )
+
+    # Step 1: Find the last update operation
+    $operationResult = Find-LastUpdateOperation -UpdateLogContent $UpdateLogContent
+
+    # Step 2: Test markers
+    # If operation block not found, still check for version marker in full log content
+    # This provides more granular feedback when completion marker is missing
+    if (-not $operationResult.Found) {
+        # Check for version marker in the full log content
+        $versionPattern = "Версія\s+програми\s*-\s*$([regex]::Escape($TargetVersion))\b"
+        $hasVersionConfirm = $UpdateLogContent -match $versionPattern
+
+        # Completion marker is definitely false (operation block not found)
+        $hasCompletionMarker = $false
+
+        # Determine more specific failure message
+        $message = if ($hasVersionConfirm) {
+            "Missing completion marker (operation incomplete)"
+        } else {
+            "No update operation found in log"
+        }
+
+        return @{
+            Status            = "Failed"
+            VersionConfirm    = $hasVersionConfirm
+            CompletionMarker  = $hasCompletionMarker
+            OperationFound    = $false
+            Message           = $message
+        }
+    }
+
+    # Operation block found - test markers within it
+    $markerResult = Test-UpdateMarker -OperationContent $operationResult.Content `
+                                      -TargetVersion $TargetVersion
+
+    # Step 3: Determine success based on both markers
+    $bothMarkersPresent = $markerResult.VersionConfirm -and $markerResult.CompletionMarker
+    $status = $bothMarkersPresent ? "Success" : "Failed"
+
+    # Build appropriate message
+    $message = if ($bothMarkersPresent) {
+        "Update completed successfully with both required markers"
+    } else {
+        "Missing required markers: " + @(
+            $markerResult.VersionConfirm ? $null : "Version confirmation"
+            $markerResult.CompletionMarker ? $null : "Completion marker"
+        ) | Where-Object { $_ } | Join-String -Separator " and "
+    }
+
+    return @{
+        Status            = $status
+        VersionConfirm    = $markerResult.VersionConfirm
+        CompletionMarker  = $markerResult.CompletionMarker
+        OperationFound    = $operationResult.Found
+        Message           = $message
     }
 }
 
@@ -223,7 +444,7 @@ function Test-UpdateOperationSuccess {
         Always returns a hashtable with the following keys:
         - Status: "Success", "Failed", "NoUpdate", or "Error"
         - ErrorId: Event ID from [MedocEventId] enum
-        - Success: $true if all success flags present, $false if any flag missing
+        - Success: $true if validation passed
         - FromVersion: Starting version (e.g., "11.02.183")
         - ToVersion: Target version (e.g., "11.02.184")
         - TargetVersion: Alternative name for ToVersion
@@ -232,21 +453,20 @@ function Test-UpdateOperationSuccess {
         - UpdateEndTime: When update process completed (from update log)
         - UpdateDuration: Duration in seconds
         - UpdateLogPath: Full path to update_YYYY-MM-DD.log
-        - Flag1_Infrastructure: $true if "IsProcessCheckPassed DI: True, AI: True" found
-        - Flag2_ServiceRestart: $true if "Службу ZvitGrp запущено" found
-        - Flag3_VersionConfirm: $true if "Версія програми - {VERSION}" found
-        - Reason: Human-readable reason for status (e.g., "All success flags confirmed" or "Missing success flags")
+        - MarkerVersionConfirm: $true if "Версія програми - {VERSION}" found
+        - MarkerCompletionMarker: $true if completion marker found
+        - OperationFound: $true if operation block boundaries were identified
+        - Reason: Human-readable reason for status (e.g., which markers are missing)
 
     .NOTES
         Strategy: Dual-log validation
         1. Detect update trigger in Planner.log: "Завантаження оновлення ezvit.X.X.X-X.X.X.upd"
         2. Extract target version from update filename
         3. Find and parse update_YYYY-MM-DD.log (FAILURE if missing)
-        4. Verify ALL 3 success flags:
-           - IsProcessCheckPassed DI: True, AI: True
-           - Службу ZvitGrp запущено
-           - Версія програми - {TARGET_VERSION}
-        5. Return SUCCESS only if ALL flags present, otherwise FAILURE
+        4. Verify both required markers:
+           - Version confirmation: Версія програми - {TARGET_VERSION}
+           - Completion marker: Завершення роботи, операція "Оновлення"
+        5. Return SUCCESS only if both markers present, otherwise FAILURE
     #>
     param(
         [Parameter(Mandatory = $true)]
@@ -372,10 +592,10 @@ function Test-UpdateOperationSuccess {
             UpdateEndTime        = $null
             UpdateDuration       = $null
             UpdateLogPath        = $updateLogPath
-            Flag1_Infrastructure = $false
-            Flag2_ServiceRestart = $false
-            Flag3_VersionConfirm = $false
-            Reason               = "Update log file not found"
+            MarkerVersionConfirm   = $false
+            MarkerCompletionMarker = $false
+            OperationFound         = $false
+            Reason                 = "Update log file not found (validation skipped because update log is missing)"
         }
     }
 
@@ -447,50 +667,24 @@ function Test-UpdateOperationSuccess {
         $updateDuration = [int]($updateEndTime - $updateStartTime).TotalSeconds
     }
 
-    # Check Flag 1: .NET Infrastructure Validation
-    $hasInfrastructureValid = $updateLogContent -match 'IsProcessCheckPassed\s+DI:\s*True,\s*AI:\s*True'
+    # Test update state using marker-based validation
+    # Returns: Status (Success/Failed), VersionConfirm, CompletionMarker, OperationFound, Message
+    $classificationResult = Test-UpdateState -UpdateLogContent $updateLogContent `
+                                             -TargetVersion $targetVersionNum
 
-    # Check Flag 2: Service Restart Success
-    # Looks for: "Службу ZvitGrp запущено" (may include "з підвищенням прав")
-    $hasServiceRestart = $updateLogContent -match 'Службу\s+ZvitGrp\s+запущено'
-
-    # Check Flag 3: Version Confirmation
-    # Looks for: "Версія програми - {TARGET_VERSION}" (exact version number from update)
-    $hasVersionConfirm = $updateLogContent -match "Версія\s+програми\s*-\s*$targetVersionNum\b"
-
-    # Success only if ALL 3 flags present
-    $allFlagsPresent = $hasInfrastructureValid -and $hasServiceRestart -and $hasVersionConfirm
-
-    # Determine Status and ErrorId based on flags
-    $status = $allFlagsPresent ? "Success" : "Failed"
-
-    # Determine ErrorId for failures
-    $errorId = if ($allFlagsPresent) {
+    # Determine final status and ErrorId
+    $status = $classificationResult.Status
+    $errorId = if ($status -eq "Success") {
         [MedocEventId]::Success
     } else {
-        $missingCount = @(
-            (-not $hasInfrastructureValid),
-            (-not $hasServiceRestart),
-            (-not $hasVersionConfirm)
-        ) | Where-Object { $_ } | Measure-Object | Select-Object -ExpandProperty Count
-
-        if ($missingCount -eq 1) {
-            if (-not $hasInfrastructureValid) {
-                [MedocEventId]::Flag1Failed
-            } elseif (-not $hasServiceRestart) {
-                [MedocEventId]::Flag2Failed
-            } else {
-                [MedocEventId]::Flag3Failed
-            }
-        } else {
-            [MedocEventId]::MultipleFlagsFailed
-        }
+        # All failures now map to UpdateValidationFailed (marker-based classification)
+        [MedocEventId]::UpdateValidationFailed
     }
 
     return @{
         Status               = $status
         ErrorId              = $errorId
-        Success              = $allFlagsPresent
+        Success              = ($status -eq "Success")
         FromVersion          = $fromVersion
         ToVersion            = $toVersion
         TargetVersion        = $targetVersionNum
@@ -499,11 +693,29 @@ function Test-UpdateOperationSuccess {
         UpdateEndTime        = $updateEndTime
         UpdateDuration       = $updateDuration
         UpdateLogPath        = $updateLogPath
-        Flag1_Infrastructure = $hasInfrastructureValid
-        Flag2_ServiceRestart = $hasServiceRestart
-        Flag3_VersionConfirm = $hasVersionConfirm
-        Reason               = if ($allFlagsPresent) { "All success flags confirmed" } else { "Missing success flags" }
+        MarkerVersionConfirm = $classificationResult.VersionConfirm
+        MarkerCompletionMarker = $classificationResult.CompletionMarker
+        OperationFound       = $classificationResult.OperationFound
+        Reason               = $classificationResult.Message
     }
+}
+
+function Invoke-EventLogSourceExists {
+    param([string]$EventLogSource)
+    [System.Diagnostics.EventLog]::SourceExists($EventLogSource)
+}
+
+function Invoke-CreateEventLogSource {
+    param(
+        [string]$EventLogSource,
+        [string]$EventLogName
+    )
+    [System.Diagnostics.EventLog]::CreateEventSource($EventLogSource, $EventLogName)
+}
+
+function New-EventLogHandle {
+    param([string]$EventLogName)
+    [System.Diagnostics.EventLog]::new($EventLogName)
 }
 
 function Write-EventLogEntry {
@@ -549,9 +761,9 @@ function Write-EventLogEntry {
         # Use .NET directly to write to Event Log (works on all Windows/PowerShell versions)
 
         # Check if source exists, create if needed
-        if (-not [System.Diagnostics.EventLog]::SourceExists($EventLogSource)) {
+        if (-not (Invoke-EventLogSourceExists -EventLogSource $EventLogSource)) {
             try {
-                [System.Diagnostics.EventLog]::CreateEventSource($EventLogSource, $EventLogName)
+                Invoke-CreateEventLogSource -EventLogSource $EventLogSource -EventLogName $EventLogName
             } catch {
                 # May fail if running without admin privileges or Event Log is unavailable
                 # When creation fails, we cannot write to Event Log - warn and exit gracefully
@@ -561,7 +773,7 @@ function Write-EventLogEntry {
         }
 
         # Write to Event Log using .NET
-        $eventLog = [System.Diagnostics.EventLog]::new($EventLogName)
+        $eventLog = New-EventLogHandle -EventLogName $EventLogName
         $eventLog.Source = $EventLogSource
 
         # Convert EventType string to EventLogEntryType enum
@@ -588,7 +800,7 @@ function Invoke-MedocUpdateCheck {
         - ChatId: Telegram chat/channel ID
 
         Optional keys:
-        - LastRunFile: Path to checkpoint file (if not provided, uses $env:ProgramData\MedocUpdateCheck\checkpoints\)
+        - LastRunFile: Path to checkpoint file (if not provided, uses $env:ProgramData/MedocUpdateCheck/checkpoints/)
         - EncodingCodePage: Log file encoding code page (default: $defaultCodePage)
         - EventLogSource: Event Log source name (default: "M.E.Doc Update Check")
 
@@ -691,7 +903,17 @@ function Invoke-MedocUpdateCheck {
     # Checkpoint file handling - support both explicit path and automatic system-wide location
     if (-not $Config.ContainsKey("LastRunFile")) {
         # Use system-wide ProgramData directory (best practice for system services)
-        $checkpointDir = "$env:ProgramData\MedocUpdateCheck\checkpoints"
+        # On non-Windows systems, fallback to /var/lib or HOME/.local/share
+        if ($env:ProgramData) {
+            $baseDir = $env:ProgramData
+        } elseif ($IsLinux -or $IsMacOS) {
+            # Prefer user-writable XDG data directory path
+            $baseDir = if ($env:XDG_DATA_HOME) { $env:XDG_DATA_HOME } else { "$env:HOME/.local/share" }
+        } else {
+            # Fallback for unknown systems
+            $baseDir = $env:HOME
+        }
+        $checkpointDir = Join-Path -Path (Join-Path -Path $baseDir -ChildPath "MedocUpdateCheck") -ChildPath "checkpoints"
 
         # Create directory if it doesn't exist
         if (-not (Test-Path $checkpointDir)) {
@@ -804,12 +1026,9 @@ function Invoke-MedocUpdateCheck {
 
         # Log message send with appropriate level: success/no-update = Information, all failures = Error
         $logLevel = switch ($eventId) {
-            ([int][MedocEventId]::Success) { "Information" }        # Success - all flags confirmed
+            ([int][MedocEventId]::Success) { "Information" }        # Success - both markers confirmed
             ([int][MedocEventId]::NoUpdate) { "Information" }       # No update - normal condition, not an error
-            ([int][MedocEventId]::Flag1Failed) { "Error" }          # Flag 1 failure - update validation failed
-            ([int][MedocEventId]::Flag2Failed) { "Error" }          # Flag 2 failure - update validation failed
-            ([int][MedocEventId]::Flag3Failed) { "Error" }          # Flag 3 failure - update validation failed
-            ([int][MedocEventId]::MultipleFlagsFailed) { "Error" }  # Multiple flag failures - update validation failed
+            ([int][MedocEventId]::UpdateValidationFailed) { "Error" } # Marker validation failed
             default { "Error" }                                       # Other event IDs (all are errors)
         }
         Write-EventLogEntry -Message $eventLogMessage `
@@ -903,10 +1122,17 @@ function Get-ExitCodeForOutcome {
 }
 
 # Export public functions
+# NOTE: Helper functions (Find-LastUpdateOperation, Test-UpdateMarker, Test-UpdateState)
+# are exported to enable direct testing with 'using module' instead of InModuleScope.
+# InModuleScope has known issues on Windows CI (parameter binding errors).
+# These functions are not intended for external use outside this project.
 Export-ModuleMember -Function @(
     "Get-VersionInfo",
     "Format-UpdateTelegramMessage",
     "Format-UpdateEventLogMessage",
+    "Find-LastUpdateOperation",
+    "Test-UpdateMarker",
+    "Test-UpdateState",
     "Test-UpdateOperationSuccess",
     "Write-EventLogEntry",
     "Invoke-MedocUpdateCheck",

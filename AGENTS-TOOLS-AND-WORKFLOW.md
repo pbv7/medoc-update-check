@@ -235,6 +235,112 @@ cat file.txt
 Use gh CLI without checking mcp__github availability
 ```
 
+## Retrieving PR Reviews and Comments
+
+### Overview
+
+This project uses automated code review bots (gemini-code-assist, chatgpt-codex-connector)
+that provide suggestions on pull requests. Use these commands to retrieve their feedback
+in a useful format.
+
+### Command Quick Reference
+
+```bash
+# View PR in browser
+gh pr view NUMBER --web
+
+# Get all comments (simple list)
+gh pr view NUMBER --json comments --jq '.comments[] | "\(.author.login): \(.body)"'
+
+# Get detailed review comments with file locations
+gh api repos/OWNER/REPO/pulls/NUMBER/comments --jq '.[] | {author: .user.login, file: .path, line: .line, body: .body}'
+```
+
+**Note**: Replace NUMBER, OWNER, REPO with actual values.
+
+### Detailed Commands
+
+#### Get All PR Comments
+
+```bash
+# Formatted output with timestamps
+gh pr view NUMBER --json comments --jq '.comments[] | "Comment by \(.author.login) at \(.createdAt):\n\(.body)\n---"'
+```
+
+#### Get PR Review Summaries
+
+```bash
+# Get review-level comments (not line-specific)
+gh pr view NUMBER --json reviews --jq '.reviews[] | "Review by \(.author.login) at \(.submittedAt):\nState: \(.state)\n\(.body)\n---"'
+```
+
+#### Get Line-Specific Review Comments
+
+```bash
+# Most detailed - includes file path and line number
+gh api repos/OWNER/REPO/pulls/NUMBER/comments --jq '.[] | "Comment by \(.user.login) on \(.path):\(.line // .original_line)\n\(.body)\n---"'
+```
+
+#### Filter by Specific Bot
+
+```bash
+# Get only gemini-code-assist comments
+gh api repos/OWNER/REPO/pulls/NUMBER/comments --jq '.[] | select(.user.login == "gemini-code-assist[bot]")'
+
+# Get only codex comments
+gh api repos/OWNER/REPO/pulls/NUMBER/comments --jq '.[] | select(.user.login == "chatgpt-codex-connector[bot]")'
+```
+
+#### Save to File for Analysis
+
+```bash
+# Save all review comments to JSON file
+gh api repos/OWNER/REPO/pulls/NUMBER/comments > pr_reviews.json
+
+# Parse saved file
+jq '.[] | {bot: .user.login, file: .path, line: .line, body: .body}' pr_reviews.json
+```
+
+### Working with Retrieved Feedback
+
+#### Quick Count
+
+```bash
+# How many bot comments on this PR?
+gh api repos/OWNER/REPO/pulls/NUMBER/comments --jq '[.[] | select(.user.login | contains("bot"))] | length'
+```
+
+#### Group by File
+
+```bash
+# Which files have comments?
+gh api repos/OWNER/REPO/pulls/NUMBER/comments --jq '[.[] | .path] | unique'
+```
+
+#### Export for Documentation
+
+```bash
+# Create a formatted summary
+gh api repos/OWNER/REPO/pulls/NUMBER/comments --jq '.[] | select(.user.login | contains("bot")) | "## \(.user.login) - \(.path):\(.line)\n\n\(.body)\n"' > PR_REVIEWS.md
+```
+
+### Invoking Review Bots
+
+```bash
+# In PR comments or via gh CLI:
+/gemini review          # Invoke gemini-code-assist
+@codex review          # Invoke chatgpt-codex-connector
+```
+
+### Tips for Agents
+
+When processing PR feedback:
+
+1. Use `gh api` for most detailed info (includes file/line)
+2. Save to JSON first, then parse with `jq` for flexibility
+3. Check if suggestion already implemented before acting
+4. Ask user before making design decisions based on suggestions
+
 ## Git Workflow for Agents
 
 ### Branch Strategy

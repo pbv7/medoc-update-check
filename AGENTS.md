@@ -30,40 +30,64 @@ for contribution guidelines.
 - No external dependencies beyond PowerShell built-ins and standard modules
 - Cross-platform testing: Workflow tests on Windows via GitHub Actions
 
-## Dual-Log Update Detection Strategy
+## 2-Marker Update Detection System
 
-The project uses a robust three-phase validation approach to detect M.E.Doc server updates:
+The system validates M.E.Doc server updates by checking for **2 critical markers** in the update logs.
 
-### Phase 1: Update Trigger Detection (Planner.log)
+### Core Concept
 
-- Searches for "Завантаження оновлення ezvit.X.X.X-X.X.X.upd" entries
-- Confirms an update was initiated on the server
-- Extracts timestamp and target version number from filename
+Update success requires BOTH markers to be present in the update log:
 
-### Phase 2: Update Log File Location
+- **Marker V (Version):** Pattern `Версія програми - {TARGET_VERSION}` confirms version matches expected
+- **Marker C (Completion):** Pattern `Завершення роботи, операція "Оновлення"` confirms operation finished
 
-- Dynamically constructs path to `update_YYYY-MM-DD.log` (DATE = update start date)
-- M.E.Doc creates separate detailed logs during update process
-- If log missing → update marked as FAILED
+**Classification:**
 
-### Phase 3: Success Flag Validation (3 Mandatory Flags)
+- ✅ **SUCCESS:** Both markers V AND C present
+- ❌ **FAILED:** Either marker V OR C missing (including incomplete/aborted operation blocks)
+- ℹ️ **NO UPDATE:** No update trigger/operation found in logs
 
-All three flags must be present for SUCCESS. Missing any flag = FAILURE:
+### Search Strategy
 
-1. **Infrastructure Validation**
-   - Pattern: `IsProcessCheckPassed DI: True, AI: True`
-   - Confirms: .NET infrastructure validation successful
+When logs contain multiple updates, the system searches **backward from end of log**:
 
-2. **Service Restart Success**
-   - Pattern: `Службу ZvitGrp запущено` (service started, accepts variations like
-     "з підвищенням прав" - with elevated privileges)
-   - Confirms: Core ZvitGrp service successfully restarted
-   - Real log example: `Службу ZvitGrp запущено з підвищенням прав`
+1. Search backward for completion marker: `Завершення роботи, операція "Оновлення"`
+2. If found, search backward for start marker: `Початок роботи, операція "Оновлення"`
+3. Extract operation block between markers
+4. Check for V and C markers within that block
+5. If no completion marker → FAILED (operation block incomplete/aborted)
 
-3. **Version Confirmation**
-   - Pattern: `Версія програми - {TARGET_VERSION}` (program version - {number})
-   - Confirms: System reports expected version number
-   - Real log example: `Версія програми - 186` means v11.02.186 confirmed
+**Result:** Only the **LAST operation** is evaluated; earlier operations are ignored.
+
+### Marker V: Version Confirmation
+
+- **Pattern:** `Версія програми - {TARGET_VERSION}`
+- **Example:** `Версія програми - 186` confirms v11.02.186
+- **Location:** Final section of update_*.log files
+- **Reliability:** Consistently present in successful updates, absent in failures
+
+### Marker C: Update Operation Completion
+
+- **Pattern:** `Завершення роботи, операція "Оновлення"`
+- **Example:** `23.10.25 10:48:38.100 00000004 INFO    Завершення роботи, операція "Оновлення"`
+- **Location:** Final operation marker
+- **Reliability:** Indicates operation block completed
+
+### Classification Matrix
+
+| V | C | Result | Meaning |
+|---|---|--------|---------|
+| ✓ | ✓ | SUCCESS | Update verified with correct version |
+| ✗ | ✓ | FAILED | Operation completed but version not confirmed |
+| ✗ | ✗ | FAILED | Operation incomplete or missing completion marker |
+| (N/A) | (N/A) | NO UPDATE | No update trigger/operation in logs |
+
+### Outcomes & Event IDs
+
+- **SUCCESS** (1000): Both markers present
+- **FAILED** (1302): Missing marker(s)
+- **NO UPDATE** (1001): No update trigger/operation found
+- **ENCODING ERROR** (1204): File read error
 
 ## Project Structure
 

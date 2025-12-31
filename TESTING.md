@@ -73,13 +73,13 @@ $config.ChatId
 
 ### 3. Test-UpdateOperationSuccess Function
 
-Test the update detection function with dual-log validation (Planner.log + update_YYYY-MM-DD.log).
+Test the update detection function with 2-marker validation (Planner.log + update_YYYY-MM-DD.log).
 
-**Note:** All results now return status objects with `Status` field and `ErrorId` (MedocEventId enum value):
+**Note:** All results return status objects with `Status` field and `ErrorId` (MedocEventId enum value):
 
 ```powershell
-# Test with successful update (all 3 success flags present)
-$result = Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\dual-log-success"
+# Test with successful update (both markers present)
+$result = Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\success-both-markers"
 $result.Status          # Should be "Success"
 $result.ErrorId         # Should be [MedocEventId]::Success (1000)
 $result.Success         # Should be $true
@@ -87,21 +87,22 @@ $result.TargetVersion   # Should show version number
 $result.UpdateTime      # Should show update time
 
 # Test with no updates
-$result = Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\dual-log-no-update"
+$result = Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\failure-no-update-detected"
 $result.Status          # Should be "NoUpdate" (returns status object, not $null)
 $result.ErrorId         # Should be [MedocEventId]::NoUpdate (1001)
 
-# Test with missing update log file
-$result = Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\dual-log-missing-updatelog"
-$result.Status          # Should be "Error"
-$result.ErrorId         # Should be [MedocEventId]::UpdateLogMissing (1201)
-$result.Message         # Should explain the failure
+# Test with missing version marker
+$result = Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\failure-missing-version-marker"
+$result.Status          # Should be "Failed"
+$result.ErrorId         # Should be [MedocEventId]::UpdateValidationFailed (1302)
+$result.MarkerVersionConfirm     # Should be $false
+$result.MarkerCompletionMarker   # Should be $true
 
-# Test with missing flag (e.g., infrastructure validation failed)
-$result = Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\dual-log-missing-flag1"
-$result.Status          # Should be "Error"
-$result.ErrorId         # Should be [MedocEventId]::Flag1Failed (1300)
-$result.Flag1_Infrastructure  # Should be $false
+# Test with missing completion marker
+$result = Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\failure-missing-completion-marker"
+$result.Status          # Should be "Failed"
+$result.ErrorId         # Should be [MedocEventId]::UpdateValidationFailed (1302)
+$result.OperationFound  # Should be $false
 ```
 
 ### 4. Checkpoint Filtering Test
@@ -110,15 +111,15 @@ Test that the function respects checkpoint times (avoids reprocessing):
 
 ```powershell
 # Create a checkpoint time before the update
-$checkpoint = [datetime]::ParseExact("01.01.2020 00:00:00", "dd.MM.yyyy HH:mm:ss", $null)
+$checkpoint = [datetime]::ParseExact("23.10.2025 00:00:00", "dd.MM.yyyy HH:mm:ss", $null)
 
 # Search with checkpoint - should find the update
-$result = Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\dual-log-success" -SinceTime $checkpoint
+$result = Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\success-both-markers" -SinceTime $checkpoint
 $result.Success    # Should be $true
 
 # Create checkpoint after the update time
-$checkpoint2 = [datetime]::ParseExact("31.12.2025 23:59:59", "dd.MM.yyyy HH:mm:ss", $null)
-$result2 = Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\dual-log-success" -SinceTime $checkpoint2
+$checkpoint2 = [datetime]::ParseExact("25.10.2025 23:59:59", "dd.MM.yyyy HH:mm:ss", $null)
+$result2 = Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\success-both-markers" -SinceTime $checkpoint2
 $result2.Status    # Should be "NoUpdate" (no update after checkpoint)
 ```
 
@@ -128,11 +129,11 @@ Test different log file encodings:
 
 ```powershell
 # Windows-1251 (Cyrillic, default - required for M.E.Doc logs)
-$result = Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\dual-log-success" -EncodingCodePage 1251
+$result = Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\success-both-markers" -EncodingCodePage 1251
 $result.Success    # Should be $true
 
 # UTF-8 (for testing compatibility)
-$result = Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\dual-log-success" -EncodingCodePage 65001
+$result = Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\success-both-markers" -EncodingCodePage 65001
 $result            # Should handle without error
 ```
 
@@ -197,10 +198,10 @@ The script writes messages to Event Log in key=value format for easy parsing:
 Server=MY-MEDOC-SERVER | Status=UPDATE_OK | FromVersion=11.02.183 | ToVersion=11.02.184 | UpdateStarted=28.10.2025 05:15:23 | UpdateCompleted=28.10.2025 05:17:20 | Duration=97 | CheckTime=28.10.2025 12:33:45
 ```
 
-**Failure message (Event ID 1300-1303):**
+**Failure message (Event ID 1302):**
 
 ```text
-Server=MY-MEDOC-SERVER | Status=UPDATE_FAILED | FromVersion=11.02.183 | ToVersion=11.02.184 | UpdateStarted=28.10.2025 05:15:23 | Flag1=False | Flag2=True | Flag3=True | Reason=Missing success flags | CheckTime=28.10.2025 12:33:45
+Server=MY-MEDOC-SERVER | Status=UPDATE_FAILED | FromVersion=11.02.183 | ToVersion=11.02.184 | UpdateStarted=28.10.2025 05:15:23 | Reason=Missing required markers: Version confirmation | CheckTime=28.10.2025 12:33:45
 ```
 
 **No update message (Event ID 1001):**
@@ -220,11 +221,11 @@ Event Log entries and function return values.
 
 | Event ID | Meaning | Action |
 |---|---|---|
-| **1000** | ✅ Update successful - All 3 flags confirmed | Monitor daily - normal |
+| **1000** | ✅ Update successful - Both markers confirmed | Monitor daily - normal |
 | **1001** | ℹ️ No update detected since checkpoint | Check next scheduled run |
 | **1100-1199** | Configuration errors (missing keys, invalid values) | Fix Config.ps1, compare with template |
 | **1200-1299** | Filesystem/environment errors (missing logs, directory issues) | Verify paths and permissions |
-| **1300-1303** | Update validation failures (missing success flags) | Review M.E.Doc update logs |
+| **1302** | Update validation failures (missing required markers) | Review M.E.Doc update logs |
 | **1400-1401** | Telegram notification errors | Verify credentials and network |
 | **1500** | Checkpoint file write failed | Check disk space and permissions |
 | **1900** | Unexpected error | Check script logs for details |
@@ -234,7 +235,7 @@ Event Log entries and function return values.
 - **1000-1001**: Normal operation. Events appear regularly per schedule.
 - **1100-1199**: Config incomplete. Compare Config.ps1 with Config.template.ps1.
 - **1200-1299**: File access issues. Verify MedocLogsPath and ProgramData permissions.
-- **1300-1303**: Update validation failed. Review M.E.Doc server logs (Planner.log and update_*.log).
+- **1302**: Update validation failed. Review M.E.Doc server logs (Planner.log and update_*.log).
 - **1400-1401**: Telegram issues. Verify bot token, chat ID, and network connectivity.
 - **1500+**: Disk space or permission issues. Check ProgramData directory.
 
@@ -273,7 +274,7 @@ $badConfig = @{
 }
 
 Invoke-MedocUpdateCheck -Config $badConfig
-# Should error and log event ID 1005 (missing config key) or 1001 (logs directory not found)
+# Should error and log event ID 1100 (missing required config key) or 1101 (invalid logs directory path)
 ```
 
 ### 10. Task Scheduler Setup Test
@@ -528,7 +529,7 @@ using module "..\lib\MedocUpdateCheck.psm1"
 
 # Later in tests, directly reference enum values
 $result.ErrorId | Should -Be ([MedocEventId]::Success)        # Type-safe
-$result.ErrorId | Should -Be ([MedocEventId]::MultipleFlagsFailed)  # Auto-validates against actual enum
+$result.ErrorId | Should -Be ([MedocEventId]::UpdateValidationFailed)  # Auto-validates against actual enum
 ```
 
 The `Import-Module` in `BeforeAll` is separate and necessary for runtime function calls.
@@ -760,15 +761,67 @@ Windows APIs.
 
 **Current Status:**
 
-- ✅ 201 tests passing on all platforms
+- ✅ 237 tests passing on Windows CI
+- ❌ 3 tests failing on Windows CI (known Pester limitation - see below)
+- ✅ 236 tests passing on macOS/Linux
 - ⏭️ 2 tests skipped on non-Windows (intentional, documented)
-- ✅ 0 failures on any platform
+
+#### Known Issues: Pester InModuleScope Mocking on Windows
+
+**Problem:** Three EventLog error handling tests consistently fail on Windows CI with
+`ParameterBindingException`, despite:
+
+- ✅ Passing on macOS/Linux
+- ✅ Using identical mock syntax to working tests
+- ✅ Having all required mocks present
+
+**Affected Tests:**
+
+- "Should warn when creating source fails" (see "Write-EventLogEntry - Error handling" context)
+- "Should warn when event log handle creation fails" (see "Write-EventLogEntry - Error handling" context)
+- "Should fail when checkpoint directory cannot be created" (see "Invoke-MedocUpdateCheck - Notification pipeline" context)
+
+**Root Cause:** When Pester mocks functions inside `InModuleScope` on Windows and a mocked
+function is called, Windows PowerShell's parameter binding resolution for functions that wrap
+.NET APIs (like `System.Diagnostics.EventLog`) triggers a `ParameterBindingException`.
+This is a known Pester limitation on Windows.
+
+**Research Evidence:**
+
+- [Pester Issue #1554](https://github.com/pester/Pester/issues/1554):
+  "Using a param-block inside MockWith behaves strangely"
+- [Pester Issue #1308](https://github.com/pester/Pester/issues/1308):
+  "Cannot execute mock - ParameterBindingException"
+- [Pester Issue #305](https://github.com/pester/Pester/issues/305):
+  "Cannot retrieve dynamic parameters"
+
+**Attempted Fixes (all failed):**
+
+1. ❌ Added missing mocks (following pattern from working test)
+2. ❌ Changed mocks to return values instead of throwing errors
+3. ❌ Removed/added param blocks in various combinations
+4. ❌ Changed mock syntax (with/without `-MockWith` parameter)
+5. ❌ Made ParameterFilter more specific for checkpoint test
+
+**Impact Assessment:**
+
+- ✅ Core EventLog functionality IS tested (working test at line 544 passes on all platforms)
+- ✅ Production code works correctly on Windows (validated manually)
+- ❌ Edge case error handling tests fail due to Pester limitation
+- ℹ️ Failing tests cover scenarios: source creation failure, handle creation failure,
+  checkpoint directory errors
+
+**Workaround:** These tests are documented as known failures in the codebase. The functionality
+they test is validated manually on Windows servers before deployment. See test file comments
+for full details.
+
+**Status:** Unresolved platform-specific Pester limitation. See test file "Known Issues" comment block.
 
 **Test Platform Coverage Matrix:**
 
 | Test Category | Windows | macOS | Linux | Notes |
 |---|---|---|---|---|
-| **Core Update Detection** | ✅ All | ✅ All | ✅ All | Log parsing, update validation, dual-log strategy |
+| **Core Update Detection** | ✅ All | ✅ All | ✅ All | Log parsing, marker validation, 2-marker system |
 | **Message Formatting** | ✅ All | ✅ All | ✅ All | Event log messages, notification text |
 | **Configuration Validation** | ✅ All | ✅ All | ✅ All | Parameter validation, file path checks |
 | **Telegram Integration** | ✅ All | ✅ All | ✅ All | Mocked API calls, message formatting |
@@ -801,7 +854,7 @@ The "Certificate encryption and decryption workflow" context tests actual encryp
 **Test Skip Details:**
 
 ```powershell
-# In tests/MedocUpdateCheck.Tests.ps1 (lines 1723-1786)
+# See "Certificate encryption and decryption workflow" context in tests/MedocUpdateCheck.Tests.ps1
 It "Should encrypt and decrypt credential data successfully" -Skip:(
     $PSVersionTable.Platform -and $PSVersionTable.Platform -ne "Win32NT"
 ) {
@@ -850,7 +903,7 @@ Windows Task Scheduler is exclusively Windows-based:
 **Test Skip Details:**
 
 ```powershell
-# In tests/Utilities.Tests.ps1 (lines 281-288)
+# See "Setup-ScheduledTask.ps1 - Task Scheduler Integration" describe block in tests/Utilities.Tests.ps1
 Describe "Setup-ScheduledTask.ps1 - Task Scheduler Integration" {
     Context "Administrative requirements" {
         It "Should require Administrator privileges" -Skip:(-not $IsWindows) {
@@ -959,17 +1012,16 @@ When adding tests for Windows-only features:
 
 ## Test Data
 
-Test data directories are provided in `tests/test-data/`. Each contains dual logs (Planner.log + update_YYYY-MM-DD.log):
+Test data directories are provided in `tests/test-data/`. Each contains M.E.Doc logs in Windows-1251 encoding:
 
-- **dual-log-success** - Update completes with all 3 success flags confirmed
-- **dual-log-no-update** - No updates available in Planner.log
-- **dual-log-missing-updatelog** - Planner.log shows update but update_YYYY-MM-DD.log is missing
-- **dual-log-missing-flag1** - Missing infrastructure ready flag (DI/AI check)
-- **dual-log-missing-flag2** - Missing service restart flag (ZvitGrp)
-- **dual-log-missing-flag3** - Missing version confirmation flag
-- **dual-log-wrong-version** - Version number mismatch (actual vs expected)
+- **success-both-markers** - Update completes with both V and C markers present
+- **failure-missing-version-marker** - Version marker missing (operation completed but version not confirmed)
+- **failure-missing-completion-marker** - Completion marker missing (operation incomplete)
+- **failure-no-update-detected** - No update operation found in logs
+- **failure-no-update-log** - Planner shows update trigger but update_*.log file is missing (treated as FAILED)
 
-These directories use realistic M.E.Doc log format with Windows-1251 encoding and Ukrainian messages.
+These directories use realistic M.E.Doc log format with Windows-1251 encoding and Ukrainian
+messages. See `tests/test-data/README.md` for detailed documentation of each scenario.
 
 ### Test Artifacts Cleanup
 
@@ -1138,7 +1190,7 @@ To measure script performance:
 ```powershell
 # Time the update check function
 $timer = Measure-Command {
-    Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\dual-log-success"
+    Test-UpdateOperationSuccess -MedocLogsPath ".\tests\test-data\success-both-markers"
 }
 $timer.TotalMilliseconds   # Should be < 100ms for typical logs
 
@@ -1224,7 +1276,7 @@ The project has comprehensive automated test coverage. Run tests to verify:
 | **Timestamp Format Handling** | 3 | ✅ Excellent | Milliseconds, log ID/level handling, line iteration |
 | **Timestamp Edge Cases** | 3 | ✅ Excellent | Single-line files, UpdateTime consistency, checkpoint filtering |
 | **Misc/Integration** | 27 | ✅ Excellent | Combined scenario testing, Invoke-MedocUpdateCheck |
-| **Total** | Check with `./tests/Run-Tests.ps1` | **EXCELLENT** | Comprehensive dual-log + timestamp regex coverage, production-ready |
+| **Total** | Check with `./tests/Run-Tests.ps1` | **EXCELLENT** | Comprehensive 2-marker + timestamp regex coverage, production-ready |
 
 #### Code Coverage Metrics (Production vs Setup Code)
 
@@ -1450,7 +1502,7 @@ Run `./tests/Run-Tests.ps1` to see current metrics. Focus on production code (li
 - Individual function testing (log parsing, message formatting, checkpoint operations, encoding, error handling)
 - Parameter validation
 - Error scenarios
-- Edge cases (timestamps, special characters, dual-log validation)
+- Edge cases (timestamps, special characters, marker validation)
 - ✅ Excellent coverage
 
 **Integration Tests:** 15/72 (21%)
@@ -1537,8 +1589,8 @@ Checked: 28.10.2025 12:33:45
 Version: 11.02.183 → 11.02.184
 Started: 28.10.2025 11:32:14
 Failed at: 28.10.2025 11:47:15
-Validation Failures: ✗ Infrastructure (DI/AI), ✓ Service Restart (ZvitGrp), ✓ Version Confirmed
-Reason: Infrastructure check missing (DI/AI)
+Markers: ✗ Version (V), ✓ Completion (C)
+Reason: Missing version confirmation in update log
 Checked: 28.10.2025 11:50:06
 ```
 
@@ -1582,7 +1634,7 @@ Every call to `Test-UpdateOperationSuccess` returns an object with these fields:
 - **`Status`** (string): One of `"Success"`, `"NoUpdate"`, or `"Error"`
 - **`ErrorId`** (MedocEventId enum): Numeric ID for categorizing the result (1000-1900+)
 - **Additional fields** (vary by status):
-  - Success: `Success`, `TargetVersion`, `UpdateTime`, `Flag1_Infrastructure`, `Flag2_ServiceRestart`, `Flag3_VersionConfirm`
+  - Success: `Success`, `TargetVersion`, `UpdateTime`, `MarkerVersionConfirm`, `MarkerCompletionMarker`
   - NoUpdate: Only Status + ErrorId (minimal)
   - Error: `Message` explaining what went wrong
 
@@ -1601,10 +1653,7 @@ The module uses a centralized enum for event categorization. Use these IDs when 
 | **Environment** | 1202 | `LogsDirectoryMissing` | Logs directory not found |
 | **Environment** | 1203 | `CheckpointDirCreationFailed` | Failed to create checkpoint directory |
 | **Environment** | 1204 | `EncodingError` | Error reading logs with Windows-1251 encoding |
-| **Validation** | 1300 | `Flag1Failed` | Infrastructure validation failed |
-| **Validation** | 1301 | `Flag2Failed` | Service restart validation failed |
-| **Validation** | 1302 | `Flag3Failed` | Version confirmation validation failed |
-| **Validation** | 1303 | `MultipleFlagsFailed` | Multiple validation flags failed |
+| **Validation** | 1302 | `Failed` | Missing required markers (version or completion) |
 | **Notification** | 1400 | `TelegramAPIError` | Telegram API error |
 | **Notification** | 1401 | `TelegramSendError` | Failed to send Telegram message |
 | **Checkpoint** | 1500 | `CheckpointWriteError` | Failed to write checkpoint file |
@@ -1620,11 +1669,11 @@ Get-WinEvent -FilterHashtable @{
     ID = 1000  # Success
 } -MaxEvents 10
 
-# View validation failures (EventID 1300-1303)
+# View validation failures (EventID 1302)
 Get-WinEvent -FilterHashtable @{
     LogName = 'Application'
     ProviderName = 'M.E.Doc Update Check'
-    ID = 1300  # Flag1Failed
+    ID = 1302  # Failed (missing markers)
 } -MaxEvents 10
 
 # View no-update events (EventID 1001 - informational, not errors)
@@ -1748,8 +1797,8 @@ Checked: 28.10.2025 22:33:26
 Version: 11.02.185 → 11.02.186
 Started: 23.10.2025 05:00:00
 Failed at: 23.10.2025 05:25:15
-Validation Failures: ✗ Infrastructure (DI/AI), ✓ Service Restart (ZvitGrp), ✓ Version Confirmed
-Reason: Infrastructure check missing (DI/AI)
+Markers: ✗ Version (V), ✓ Completion (C)
+Reason: Missing version confirmation in update log
 Checked: 28.10.2025 22:33:26
 ```
 
@@ -1773,7 +1822,7 @@ Server=MY-MEDOC-SERVER | Status=UPDATE_OK | FromVersion=11.02.185 | ToVersion=11
 **Failure Output (includes validation flag details):**
 
 ```text
-Server=MY-MEDOC-SERVER | Status=UPDATE_FAILED | FromVersion=11.02.185 | ToVersion=11.02.186 | UpdateStarted=23.10.2025 05:00:00 | Flag1=False | Flag2=True | Flag3=True | Reason=Infrastructure check missing (DI/AI) | CheckTime=28.10.2025 22:33:26
+Server=MY-MEDOC-SERVER | Status=UPDATE_FAILED | FromVersion=11.02.185 | ToVersion=11.02.186 | UpdateStarted=23.10.2025 05:00:00 | Reason=Missing required markers: Version confirmation | CheckTime=28.10.2025 22:33:26
 ```
 
 ---
@@ -1957,7 +2006,7 @@ This section describes four realistic test scenarios and expected behavior for e
 1. Run update check for first time
 2. Function reads M.E.Doc logs
 3. Finds completed update from this morning
-4. Detects all 3 success flags
+4. Detects both required markers (version confirmation and completion)
 5. Sends Telegram notification
 6. Creates checkpoint file
 
@@ -2011,26 +2060,25 @@ Message: "No update detected since last check at 28.10.2025 22:33:26"
 1. Run update check
 2. Function finds update entry in Planner.log
 3. Finds corresponding update_YYYY-MM-DD.log
-4. Looks for all 3 success flags:
-   - ✅ Flag 1 found: Infrastructure check passed
-   - ✅ Flag 2 found: Service restart successful
-   - ❌ Flag 3 missing: Version confirmation NOT found
-5. Marks update as FAILED
-6. Sends error notification
-7. Logs with flag failure Event ID
+4. Checks for 2 critical markers:
+   - ✅ Marker V found: Version confirmation present
+   - ✅ Marker C found: Completion marker present
+5. Marks update as SUCCESS or FAILED based on marker presence
+6. Sends appropriate notification
+7. Logs with outcome Event ID
 
 **Expected Result:**
 
-- Notification received with "UPDATE FAILED" status ✅
-- Specific flag failure indicated ✅
-- Event Log: Flag3Failed (ID 1302) ✅
+- Notification received with appropriate status (SUCCESS, FAILED, or NO UPDATE) ✅
+- Correct outcome classification ✅
+- Event Log: Correct ErrorId based on marker status ✅
 
 **What Gets Logged:**
 
 ```text
-Event ID: 1302 (Flag3Failed)
-Level: Error
-Message: "Update validation failed: Version confirmation not found in update log"
+Event ID: 1000 (Success) or 1302 (Failed) or 1001 (NoUpdate)
+Level: Information or Error
+Message: Describing the outcome and reason
 ```
 
 ### Scenario 4: Checkpoint Directory Creation Fails
@@ -2112,9 +2160,7 @@ The function distinguishes between warnings (non-critical) and errors (critical 
 | 1101 | ConfigInvalidValue | Invalid config parameter | Fix the value |
 | 1202 | LogsDirectoryMissing | M.E.Doc path not found | Verify installation path |
 | 1203 | CheckpointDirCreationFailed | Can't write checkpoint | Check disk permissions |
-| 1300 | Flag1Failed | Infrastructure validation missing | Investigate update logs |
-| 1301 | Flag2Failed | Service restart failed | Check M.E.Doc services |
-| 1302 | Flag3Failed | Version mismatch | Update didn't complete |
+| 1302 | Failed | Missing required markers | Check update logs for V and C markers |
 | 1400 | TelegramAPIError | Telegram API rejected message | Check bot token, chat ID |
 | 1401 | TelegramSendError | Network error sending message | Check internet connection |
 
@@ -2182,7 +2228,7 @@ Get-WinEvent -FilterHashtable @{
     LogName      = "Application"
     ProviderName = "M.E.Doc Update Check"
     Level        = 2  # 2 = Error only
-} | Where-Object { $_.EventId -in 1100, 1202, 1300, 1301, 1302, 1400 }
+} | Where-Object { $_.EventId -in 1100, 1202, 1302, 1400 }
 ```
 
 **For Operational Tracking (All levels):**

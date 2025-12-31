@@ -33,26 +33,64 @@ Breakdown by category:
 
 - **Unit Tests:** Message formatting, checkpoint operations, log parsing, encoding,
   error handling
-- **Integration Tests:** Dual-log validation, configuration validation, module exports,
+- **Integration Tests:** 2-marker validation, configuration validation, module exports,
   Invoke-MedocUpdateCheck workflows
+
+**Expected Results:**
+
+- macOS/Linux: 236 passed, 2 skipped (Windows-only features)
+- Windows CI: 237 passed, 3 failed (known Pester limitation - see below)
+
+## Known Issues
+
+### Pester InModuleScope Mocking on Windows
+
+**Problem:** Three EventLog error handling tests fail on Windows CI with `ParameterBindingException`.
+
+**Why This Happens:** Pester has a known limitation when mocking functions inside `InModuleScope`
+on Windows. When a mocked function that wraps .NET APIs (like `System.Diagnostics.EventLog`) is
+called, Windows PowerShell's parameter binding triggers an exception.
+
+**Affected Tests:**
+
+- "Should warn when creating source fails"
+- "Should warn when event log handle creation fails"
+- "Should fail when checkpoint directory cannot be created"
+
+**What This Means for Agents:**
+
+- These are **known failures** - not new bugs
+- Core EventLog functionality IS tested and works
+- Failing tests cover edge case error scenarios
+- Production code is validated manually on Windows
+
+**When Investigating Test Failures:**
+
+1. Check if failure is one of the 3 known failing tests above
+2. If yes: This is expected, not a regression
+3. If no: Investigate as a real failure
+
+**Research Links:**
+
+- [Pester #1554](https://github.com/pester/Pester/issues/1554)
+- [Pester #1308](https://github.com/pester/Pester/issues/1308)
+- Full details in TESTING.md "Platform-Specific Tests - Known Issues" section
 
 ## Test Data & Encoding
 
 All test data files in `tests/test-data/` are **Windows-1251 encoded** (required for M.E.Doc
 Cyrillic log support).
 
-### Dual-Log Test Structure
+### Test Data Structure
 
-Each test scenario consists of a directory with both `Planner.log` and `update_YYYY-MM-DD.log`:
+Each test scenario consists of a directory with `Planner.log` and optionally `update_YYYY-MM-DD.log`:
 
 ```text
-dual-log-success/           - All 3 success flags present
-dual-log-no-update/         - No update entries in Planner.log
-dual-log-missing-updatelog/ - Update triggered but log file missing
-dual-log-missing-flag1/     - Missing infrastructure validation flag
-dual-log-missing-flag2/     - Missing service restart flag
-dual-log-missing-flag3/     - Missing version confirmation flag
-dual-log-wrong-version/     - Version number mismatch
+success-both-markers/                  - Both V and C markers present → SUCCESS
+failure-missing-version-marker/        - C present, V missing → FAILED
+failure-missing-completion-marker/     - V present, C missing (incomplete) → FAILED
+failure-no-update-detected/            - No operation found → NO UPDATE
+failure-no-update-log/                 - Planner shows update, update log missing → FAILED (UpdateLogMissing)
 ```
 
 ### If Modifying Test Data
@@ -145,7 +183,7 @@ BeforeAll {
 }
 
 It "should parse log" {
-    $path = "$testDataDir/dual-log-success"  # Error: $testDataDir is null
+    $path = "$testDataDir/success-both-markers"  # Error: $testDataDir is null
 }
 ```
 
@@ -157,7 +195,7 @@ BeforeAll {
 }
 
 It "should parse log" {
-    $logsDir = "$script:testDataDir/dual-log-success"  # Works!
+    $logsDir = "$script:testDataDir/success-both-markers"  # Works!
 }
 ```
 
@@ -226,10 +264,7 @@ All `MedocEventId` enum members can be referenced:
 [MedocEventId]::LogsDirectoryMissing        # 1202 - Logs directory not found
 [MedocEventId]::CheckpointDirCreationFailed # 1203 - Checkpoint dir creation failed
 [MedocEventId]::EncodingError               # 1204 - Encoding error reading logs
-[MedocEventId]::Flag1Failed                 # 1300 - Infrastructure validation failed
-[MedocEventId]::Flag2Failed                 # 1301 - Service restart failed
-[MedocEventId]::Flag3Failed                 # 1302 - Version confirmation failed
-[MedocEventId]::MultipleFlagsFailed         # 1303 - Multiple flags missing
+[MedocEventId]::UpdateValidationFailed      # 1302 - Update validation failed (missing markers)
 [MedocEventId]::TelegramAPIError            # 1400 - Telegram API error
 [MedocEventId]::TelegramSendError           # 1401 - Telegram message send failed
 [MedocEventId]::CheckpointWriteError        # 1500 - Checkpoint write failed
@@ -533,7 +568,7 @@ It "test" {
 
 ```powershell
 # Test data encoding issue: logs must be Windows-1251
-$result = Test-UpdateOperationSuccess -MedocLogsPath "dual-log-success"
+$result = Test-UpdateOperationSuccess -MedocLogsPath "success-both-markers"
 # If encoding is wrong, patterns won't match
 ```
 
@@ -542,7 +577,7 @@ $result = Test-UpdateOperationSuccess -MedocLogsPath "dual-log-success"
 ```powershell
 # Ensure test data directories use Windows-1251 encoding
 # In tests, create files with proper encoding
-$result = Test-UpdateOperationSuccess -MedocLogsPath "dual-log-success"
+$result = Test-UpdateOperationSuccess -MedocLogsPath "success-both-markers"
 
 # To fix test file encoding to Windows-1251 (PowerShell native - all platforms):
 $encoding = [System.Text.Encoding]::GetEncoding(1251)
