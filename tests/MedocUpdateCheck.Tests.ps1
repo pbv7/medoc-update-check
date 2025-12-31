@@ -99,10 +99,9 @@ Describe "Test-UpdateOperationSuccess - Core Update Detection Function" {
             $logsDir = Join-Path $script:testDataDir "failure-missing-completion-marker"
             $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            # Without completion marker, operation block is not recognized
-            $result.OperationFound | Should -Be $false
+            # Operation is found (incomplete - missing completion marker)
+            $result.OperationFound | Should -Be $true
             $result.Status | Should -Be "Failed"
-            # But version marker should still be detected in the log
             $result.MarkerVersionConfirm | Should -Be $true
             $result.MarkerCompletionMarker | Should -Be $false
         }
@@ -147,11 +146,10 @@ Describe "Test-UpdateOperationSuccess - Core Update Detection Function" {
             $logsDir = Join-Path $script:testDataDir "failure-missing-completion-marker"
             $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            # Operation not found indicates incomplete operation block
+            # Operation is found (incomplete - missing completion marker)
             $result.Status | Should -Be "Failed"
             $result.Success | Should -Be $false
-            $result.OperationFound | Should -Be $false
-            # Version marker should be detected even without completion
+            $result.OperationFound | Should -Be $true
             $result.MarkerVersionConfirm | Should -Be $true
             $result.MarkerCompletionMarker | Should -Be $false
         }
@@ -899,7 +897,26 @@ New content here
             $result = Find-LastUpdateOperation -UpdateLogContent $logContent
 
             $result.Found | Should -Be $false
-            $result.EndPosition | Should -Not -BeNullOrEmpty
+        }
+
+        It "Should detect trailing incomplete operation (P1 critical bug fix)" {
+            # Detects when a new operation starts AFTER the last completion
+            # Returns the incomplete operation for marker validation
+            $logContent = @"
+Початок роботи, операція "Оновлення"
+Old operation completed
+Завершення роботи, операція "Оновлення"
+Some content between operations
+Початок роботи, операція "Оновлення"
+New operation started but never completed (TRAILING INCOMPLETE)
+"@
+
+            $result = Find-LastUpdateOperation -UpdateLogContent $logContent
+
+            # Should find the trailing incomplete operation
+            $result.Found | Should -Be $true
+            $result.Content | Should -Match 'New operation started'
+            $result.Content | Should -Not -Match 'Old operation'
         }
     }
 }
@@ -1967,10 +1984,8 @@ Describe "Integration Tests - Comprehensive Marker-Based Detection Scenarios" {
             $logsDir = Join-Path $script:testDataDir "failure-missing-completion-marker"
             $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
 
-            # Operation detection requires BOTH start and completion markers
-            # Missing completion means operation block not found at all
-            $result.OperationFound | Should -Be $false
-            # But version marker should still be detected
+            # Operation is found (incomplete - missing completion marker)
+            $result.OperationFound | Should -Be $true
             $result.MarkerVersionConfirm | Should -Be $true
             $result.MarkerCompletionMarker | Should -Be $false
         }
@@ -2001,6 +2016,38 @@ Describe "Integration Tests - Comprehensive Marker-Based Detection Scenarios" {
             $result.Status | Should -Be "Failed"
             # Not NoUpdate because update was detected in Planner
             $result.Status | Should -Not -Be "NoUpdate"
+        }
+    }
+
+    Context "Failure scenario: trailing incomplete operation (P1 critical bug fix)" {
+        It "Should detect trailing incomplete operation as failed" {
+            $logsDir = Join-Path $script:testDataDir "failure-trailing-incomplete"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Should detect the incomplete trailing operation
+            # Should NOT report the earlier completed operation as "latest"
+            $result.Status | Should -Be "Failed"
+            $result.Success | Should -Be $false
+            $result.OperationFound | Should -Be $true
+        }
+
+        It "Should report correct version for trailing incomplete" {
+            $logsDir = Join-Path $script:testDataDir "failure-trailing-incomplete"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Version should come from latest Planner entry (186->187)
+            # Not from the earlier completed operation (185->186)
+            $result.FromVersion | Should -Be "11.02.186"
+            $result.ToVersion | Should -Be "11.02.187"
+        }
+
+        It "Should detect version marker in trailing incomplete" {
+            $logsDir = Join-Path $script:testDataDir "failure-trailing-incomplete"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            # Version marker (187) should be detected even though operation incomplete
+            $result.MarkerVersionConfirm | Should -Be $true
+            $result.MarkerCompletionMarker | Should -Be $false
         }
     }
 
@@ -2088,12 +2135,11 @@ Describe "Integration Tests - Comprehensive Marker-Based Detection Scenarios" {
         }
 
         It "Missing completion marker means operation not found" {
-            # When completion marker missing, operation block not detected
+            # When completion marker missing, operation is found (incomplete)
             $resultMissingC = Test-UpdateOperationSuccess -MedocLogsPath (Join-Path $script:testDataDir "failure-missing-completion-marker")
             $resultMissingC.Status | Should -Be "Failed"
-            # Operation detection requires both markers
-            $resultMissingC.OperationFound | Should -Be $false
-            # But version marker should still be detected
+            # Operation is found (incomplete - missing completion marker)
+            $resultMissingC.OperationFound | Should -Be $true
             $resultMissingC.MarkerVersionConfirm | Should -Be $true
             $resultMissingC.MarkerCompletionMarker | Should -Be $false
         }

@@ -228,11 +228,13 @@ function Find-LastUpdateOperation {
         [string]$UpdateLogContent
     )
 
-    # Search for operation end marker (completion)
+    $startMarker = 'Початок роботи, операція "Оновлення"'
     $endMarker = 'Завершення роботи, операція "Оновлення"'
-    $endPosition = $UpdateLogContent.LastIndexOf($endMarker)
 
-    if ($endPosition -eq -1) {
+    # Find the LAST start marker
+    $lastStartPosition = $UpdateLogContent.LastIndexOf($startMarker)
+
+    if ($lastStartPosition -eq -1) {
         # No operation found
         return @{
             Found        = $false
@@ -242,29 +244,29 @@ function Find-LastUpdateOperation {
         }
     }
 
-    # Search backward from end position for operation start marker
-    $startMarker = 'Початок роботи, операція "Оновлення"'
-    $contentBeforeEnd = $UpdateLogContent.Substring(0, $endPosition)
-    $startPosition = $contentBeforeEnd.LastIndexOf($startMarker)
+    # Check if there's a completion marker AFTER the last start marker
+    $contentAfterStart = $UpdateLogContent.Substring($lastStartPosition)
+    $completionRelativePosition = $contentAfterStart.IndexOf($endMarker)
 
-    if ($startPosition -eq -1) {
-        # Found end marker but not start marker (malformed log)
+    if ($completionRelativePosition -eq -1) {
+        # Incomplete operation: start without completion
+        $operationContent = $contentAfterStart
         return @{
-            Found        = $false
-            StartPosition = $null
-            EndPosition  = $endPosition
-            Content      = ""
+            Found        = $true
+            StartPosition = $lastStartPosition
+            EndPosition  = $UpdateLogContent.Length
+            Content      = $operationContent
         }
     }
 
-    # Extract operation content (from start marker to end of end marker)
-    $operationStart = $startPosition
-    $operationEnd = $endPosition + $endMarker.Length
-    $operationContent = $UpdateLogContent.Substring($operationStart, $operationEnd - $operationStart)
+    # Complete operation: both markers present
+    $completionPosition = $lastStartPosition + $completionRelativePosition
+    $operationEnd = $completionPosition + $endMarker.Length
+    $operationContent = $UpdateLogContent.Substring($lastStartPosition, $operationEnd - $lastStartPosition)
 
     return @{
         Found        = $true
-        StartPosition = $startPosition
+        StartPosition = $lastStartPosition
         EndPosition  = $operationEnd
         Content      = $operationContent
     }
@@ -1120,6 +1122,10 @@ function Get-ExitCodeForOutcome {
 }
 
 # Export public functions
+# NOTE: Helper functions (Find-LastUpdateOperation, Test-UpdateMarker, Test-UpdateState)
+# are exported to enable direct testing with 'using module' instead of InModuleScope.
+# InModuleScope has known issues on Windows CI (parameter binding errors).
+# These functions are not intended for external use outside this project.
 Export-ModuleMember -Function @(
     "Get-VersionInfo",
     "Format-UpdateTelegramMessage",
