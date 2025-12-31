@@ -183,10 +183,11 @@ function Format-UpdateEventLogMessage {
             $endTimeStr = if ($UpdateResult.UpdateEndTime) { $UpdateResult.UpdateEndTime.ToString('dd.MM.yyyy HH:mm:ss') } else { "N/A" }
             return "Server=$ServerName | Status=UPDATE_OK | FromVersion=$($UpdateResult.FromVersion) | ToVersion=$($UpdateResult.ToVersion) | UpdateStarted=$startTimeStr | UpdateCompleted=$endTimeStr | Duration=$($UpdateResult.UpdateDuration) | CheckTime=$CheckTime"
         } else {
-            # FAILURE case: Omit marker details, include reason
+            # FAILURE case: Include marker details for automated alerting, include reason
             $startTime = if ($UpdateResult.UpdateStartTime) { $UpdateResult.UpdateStartTime.ToString('dd.MM.yyyy HH:mm:ss') } else { "N/A" }
+            $markerDetails = "MarkerV=$($UpdateResult.MarkerVersionConfirm) | MarkerC=$($UpdateResult.MarkerCompletionMarker)"
 
-            return "Server=$ServerName | Status=UPDATE_FAILED | FromVersion=$($UpdateResult.FromVersion) | ToVersion=$($UpdateResult.ToVersion) | UpdateStarted=$startTime | Reason=$($UpdateResult.Reason) | CheckTime=$CheckTime"
+            return "Server=$ServerName | Status=UPDATE_FAILED | FromVersion=$($UpdateResult.FromVersion) | ToVersion=$($UpdateResult.ToVersion) | UpdateStarted=$startTime | $markerDetails | Reason=$($UpdateResult.Reason) | CheckTime=$CheckTime"
         }
     } else {
         # Legacy: $null case (should not happen with new code, but kept for safety)

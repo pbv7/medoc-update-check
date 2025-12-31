@@ -788,11 +788,15 @@ Describe "Message Formatting - Edge Cases" {
                 ToVersion = "11.02.186"
                 Reason = "Missing completion marker"
                 UpdateStartTime = Get-Date
+                MarkerVersionConfirm = $false
+                MarkerCompletionMarker = $false
             }
 
             $message = Format-UpdateEventLogMessage -UpdateResult $updateResult -ServerName "SRV" -CheckTime "01.01.2025 00:00:01"
             $message | Should -Match "UPDATE_FAILED"
             $message | Should -Match "Reason="
+            $message | Should -Match "MarkerV="
+            $message | Should -Match "MarkerC="
         }
 
         It "Should fallback to minimal message when UpdateResult is null" {
