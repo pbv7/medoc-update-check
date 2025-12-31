@@ -777,9 +777,9 @@ Windows APIs.
 
 **Affected Tests:**
 
-- "Should warn when creating source fails" (MedocUpdateCheck.Tests.ps1:579-593)
-- "Should warn when event log handle creation fails" (MedocUpdateCheck.Tests.ps1:595-607)
-- "Should fail when checkpoint directory cannot be created" (MedocUpdateCheck.Tests.ps1:1403)
+- "Should warn when creating source fails" (see "Write-EventLogEntry - Error handling" context)
+- "Should warn when event log handle creation fails" (see "Write-EventLogEntry - Error handling" context)
+- "Should fail when checkpoint directory cannot be created" (see "Invoke-MedocUpdateCheck - Notification pipeline" context)
 
 **Root Cause:** When Pester mocks functions inside `InModuleScope` on Windows and a mocked
 function is called, Windows PowerShell's parameter binding resolution for functions that wrap
@@ -815,7 +815,7 @@ This is a known Pester limitation on Windows.
 they test is validated manually on Windows servers before deployment. See test file comments
 for full details.
 
-**Status:** Unresolved platform-specific Pester limitation. Tracked in test file (line 493-523).
+**Status:** Unresolved platform-specific Pester limitation. See test file "Known Issues" comment block.
 
 **Test Platform Coverage Matrix:**
 
@@ -854,7 +854,7 @@ The "Certificate encryption and decryption workflow" context tests actual encryp
 **Test Skip Details:**
 
 ```powershell
-# In tests/MedocUpdateCheck.Tests.ps1 (lines 1723-1786)
+# See "Certificate encryption and decryption workflow" context in tests/MedocUpdateCheck.Tests.ps1
 It "Should encrypt and decrypt credential data successfully" -Skip:(
     $PSVersionTable.Platform -and $PSVersionTable.Platform -ne "Win32NT"
 ) {
@@ -903,7 +903,7 @@ Windows Task Scheduler is exclusively Windows-based:
 **Test Skip Details:**
 
 ```powershell
-# In tests/Utilities.Tests.ps1 (lines 281-288)
+# See "Setup-ScheduledTask.ps1 - Task Scheduler Integration" describe block in tests/Utilities.Tests.ps1
 Describe "Setup-ScheduledTask.ps1 - Task Scheduler Integration" {
     Context "Administrative requirements" {
         It "Should require Administrator privileges" -Skip:(-not $IsWindows) {

@@ -1319,7 +1319,7 @@ When you run PSScriptAnalyzer, you may see these warnings - **they are acceptabl
 | **PSAvoidUsingWriteHost** | Test files, Run-Tests.ps1 | CLI scripts use colored console output | ✅ Expected - necessary for user-friendly output |
 | **PSUseBOMForUnicodeEncodedFile** | Multiple files | Files contain Cyrillic (Ukrainian) text | ✅ Expected - BOM is optional |
 | **PSReviewUnusedParameter** | Test mock functions | Mock functions must match signature | ✅ Expected - necessary for mocking |
-| **PSUseShouldProcessForStateChangingFunctions** | MedocUpdateCheck.psm1:617 | Helper function, not state-changing | ✅ Expected - helpers don't need ShouldProcess |
+| **PSUseShouldProcessForStateChangingFunctions** | MedocUpdateCheck.psm1 (Find-LastUpdateOperation function) | Helper function, not state-changing | ✅ Expected - helpers don't need ShouldProcess |
 
 **Important:** These are style warnings, not errors. They don't affect functionality or
 security. The project legitimately needs `Write-Host` for interactive scripts and status

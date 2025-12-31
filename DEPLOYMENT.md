@@ -370,7 +370,7 @@ Message      : Server=MY-MEDOC-SERVER | Status=UPDATE_OK | FromVersion=11.02.183
 #### Success Indicators
 
 - ☐ Task Scheduler task is created and configured
-- ☐ Event Log shows entry from M.E.Doc Update Check (any Event ID: 1000, 1001, 1002, etc.)
+- ☐ Event Log shows entry from M.E.Doc Update Check (Event ID 1000, 1001, or error codes 1100+)
 - ☐ Event message contains correct server name
 - ☐ For updates: Event ID 1000 shows UPDATE_OK status with version details
 
@@ -448,7 +448,7 @@ For detailed Event Log query guidance, see [TESTING.md - Event Log Test](TESTING
 
 #### What to Look For
 
-- ☐ Event ID 1000 appears regularly (all verification flags confirmed)
+- ☐ Event ID 1000 appears regularly (both required markers confirmed)
 - ☐ No error Event IDs in unexpected patterns
 - ☐ Checkpoint files updated regularly in ProgramData
 - ☐ See [SECURITY.md - Event ID Reference](SECURITY.md#event-id-reference) for complete monitoring strategy
@@ -517,7 +517,7 @@ If bot token needs rotation:
 
 - **2** — Update detected but validation failed
   - Update operation found in logs
-  - One or more required validation flags missing or version mismatch
+  - One or more required markers missing or version mismatch
   - Critical condition requiring immediate investigation
   - May indicate incomplete update or infrastructure issue
 

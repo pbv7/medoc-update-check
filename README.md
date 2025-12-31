@@ -232,9 +232,13 @@ When `LastRunFile` is not specified, the script automatically generates the chec
   - Example: `MEDOC@SRV#01` → `last_run_MEDOC_SRV_01.txt` (@ and # replaced)
   - Example: `СервМедок` (Cyrillic) → `last_run________________.txt` (each character replaced)
 
-- **Directory:** `$env:ProgramData\MedocUpdateCheck\checkpoints\`
+- **Directory (Windows):** `$env:ProgramData\MedocUpdateCheck\checkpoints\`
+  - Default: `C:\ProgramData\MedocUpdateCheck\checkpoints\`
+- **Directory (Linux/macOS):**
+  - `$XDG_DATA_HOME/MedocUpdateCheck/checkpoints/` if XDG_DATA_HOME is set
+  - Otherwise: `$HOME/.local/share/MedocUpdateCheck/checkpoints/`
 - **Auto-created:** Directory and file are automatically created on first run
-- **Permissions:** Restricted to SYSTEM user and Administrators
+- **Permissions (Windows):** Restricted to SYSTEM user and Administrators
 
 This ensures ServerName can contain special characters without causing file system errors.
 
@@ -374,7 +378,7 @@ When ready to manage code from one location:
 - Check bot token in Config.ps1 is correct and not expired
 - Check chat ID is correct (test manually with curl or Postman)
 - Verify bot has permission to send messages to the chat/channel
-- Check Windows Event Log for errors (Event ID 1002, 1003)
+- Check Windows Event Log for errors (see SECURITY.md - Event ID Reference for complete list)
 - Test API manually: Replace `{TOKEN}` and `{CHAT_ID}` with actual values:
 
   ```bash
@@ -514,7 +518,7 @@ Returns status object with fields:
 
 - `Status`: "Success", "Failed", "NoUpdate", or "Error"
 - `ErrorId`: MedocEventId enum value (1000-1900+) for categorizing the result
-- For **Success/Failed**: Includes version info, timestamps, marker detection flags, and reason text
+- For **Success/Failed**: Includes version info, timestamps, marker detection results, and reason text
 - For **NoUpdate**: Minimal (Status + ErrorId + message)
 - For **Error**: Status + ErrorId + error Message
 

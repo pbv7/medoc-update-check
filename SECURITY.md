@@ -671,7 +671,7 @@ Event IDs are organized by category for easy filtering and monitoring in Windows
 
 | ID | Level | Scenario | Meaning | Action |
 |---|---|---|---|---|
-| **1000** | Info | ✅ Success | All 3 update flags confirmed | Monitor daily - normal |
+| **1000** | Info | ✅ Success | Both required markers (V and C) confirmed | Monitor daily - normal |
 | **1001** | Info | ℹ️ No Update | No update in logs since checkpoint | Check next run |
 
 #### Configuration Errors (1100-1199)
