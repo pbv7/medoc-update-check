@@ -16,8 +16,9 @@ using module "..\lib\MedocUpdateCheck.psm1"
 #>
 
 BeforeAll {
-    Import-Module -Force './lib/MedocUpdateCheck.psm1'
-    $script:testDataDir = Join-Path (Get-Item "./tests/test-data" -ErrorAction SilentlyContinue).FullName "."
+    $modulePath = Join-Path $PSScriptRoot ".." "lib" "MedocUpdateCheck.psm1"
+    Import-Module -Force $modulePath
+    $script:testDataDir = Join-Path $PSScriptRoot "test-data"
     $script:tempDirectories = @()
 }
 
