@@ -780,7 +780,7 @@ function Invoke-MedocUpdateCheck {
         - ChatId: Telegram chat/channel ID
 
         Optional keys:
-        - LastRunFile: Path to checkpoint file (if not provided, uses $env:ProgramData\MedocUpdateCheck\checkpoints\)
+        - LastRunFile: Path to checkpoint file (if not provided, uses $env:ProgramData/MedocUpdateCheck/checkpoints/)
         - EncodingCodePage: Log file encoding code page (default: $defaultCodePage)
         - EventLogSource: Event Log source name (default: "M.E.Doc Update Check")
 
@@ -883,7 +883,16 @@ function Invoke-MedocUpdateCheck {
     # Checkpoint file handling - support both explicit path and automatic system-wide location
     if (-not $Config.ContainsKey("LastRunFile")) {
         # Use system-wide ProgramData directory (best practice for system services)
-        $checkpointDir = "$env:ProgramData\MedocUpdateCheck\checkpoints"
+        # On non-Windows systems, fallback to /var/lib or HOME/.local/share
+        if ($env:ProgramData) {
+            $baseDir = $env:ProgramData
+        } elseif ($IsLinux -or $IsMacOS) {
+            $baseDir = if (Test-Path "/var/lib") { "/var/lib" } else { "$env:HOME/.local/share" }
+        } else {
+            # Fallback for unknown systems
+            $baseDir = $env:HOME
+        }
+        $checkpointDir = Join-Path -Path (Join-Path -Path $baseDir -ChildPath "MedocUpdateCheck") -ChildPath "checkpoints"
 
         # Create directory if it doesn't exist
         if (-not (Test-Path $checkpointDir)) {
