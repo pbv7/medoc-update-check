@@ -1367,10 +1367,10 @@ Describe "Invoke-MedocUpdateCheck - Main Orchestrator Function" {
                 ChatId        = "12345"
             }
 
-            Mock -ModuleName MedocUpdateCheck -CommandName New-Item -MockWith { throw "Access denied" } -ParameterFilter {
-                $ItemType -eq 'Directory' -and $Path -match 'checkpoints'
+            Mock -ModuleName MedocUpdateCheck -CommandName New-Item { throw "Access denied" } -ParameterFilter {
+                $ItemType -eq 'Directory' -and $Path -match 'MedocUpdateCheck' -and $Path -match 'checkpoints'
             }
-            Mock -ModuleName MedocUpdateCheck -CommandName Test-UpdateOperationSuccess -MockWith {
+            Mock -ModuleName MedocUpdateCheck -CommandName Test-UpdateOperationSuccess {
                 param($MedocLogsPath, $SinceTime, $EncodingCodePage)
                 throw "Should not be called"
             }
