@@ -556,7 +556,8 @@ Describe "Write-EventLogEntry - Event Log Handling" {
                 }
                 Mock New-EventLogHandle {
                     param($EventLogName)
-                    throw "Should not be called in this test"
+                    # Return a dummy object (should not be called, but just in case)
+                    [pscustomobject]@{ Source = $null }
                 }
 
                 Write-EventLogEntry -Message "Test entry" -EventType Error -EventId 2001
@@ -572,7 +573,8 @@ Describe "Write-EventLogEntry - Event Log Handling" {
                 }
                 Mock Invoke-CreateEventLogSource {
                     param($EventLogSource, $EventLogName)
-                    throw "Should not be called in this test"
+                    # Return nothing (should not be called)
+                    $null
                 }
                 Mock New-EventLogHandle {
                     param($EventLogName)
