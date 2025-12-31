@@ -18,6 +18,7 @@ This document provides a step-by-step checklist for deploying M.E.Doc Update Che
 Visit the [Latest Release page](https://github.com/pbv7/medoc-update-check/releases/latest) and download the ZIP file.
 
 **You can download either:**
+
 - **On target server** (for single server deployment) → extract to `C:\Apps\medoc-update-check`
 - **On your workstation** (for multi-server deployment) → extract locally, then copy to servers in Step 1
 
