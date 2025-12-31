@@ -102,6 +102,9 @@ Describe "Test-UpdateOperationSuccess - Core Update Detection Function" {
             # Without completion marker, operation block is not recognized
             $result.OperationFound | Should -Be $false
             $result.Status | Should -Be "Failed"
+            # But version marker should still be detected in the log
+            $result.MarkerVersionConfirm | Should -Be $true
+            $result.MarkerCompletionMarker | Should -Be $false
         }
     }
 
@@ -148,6 +151,9 @@ Describe "Test-UpdateOperationSuccess - Core Update Detection Function" {
             $result.Status | Should -Be "Failed"
             $result.Success | Should -Be $false
             $result.OperationFound | Should -Be $false
+            # Version marker should be detected even without completion
+            $result.MarkerVersionConfirm | Should -Be $true
+            $result.MarkerCompletionMarker | Should -Be $false
         }
 
         It "Should use correct failure ErrorId for missing markers" {
@@ -790,6 +796,7 @@ Describe "Message Formatting - Edge Cases" {
                 UpdateStartTime = Get-Date
                 MarkerVersionConfirm = $false
                 MarkerCompletionMarker = $false
+                OperationFound = $false
             }
 
             $message = Format-UpdateEventLogMessage -UpdateResult $updateResult -ServerName "SRV" -CheckTime "01.01.2025 00:00:01"
@@ -797,6 +804,7 @@ Describe "Message Formatting - Edge Cases" {
             $message | Should -Match "Reason="
             $message | Should -Match "MarkerV="
             $message | Should -Match "MarkerC="
+            $message | Should -Match "OpFound="
         }
 
         It "Should fallback to minimal message when UpdateResult is null" {
@@ -1420,6 +1428,9 @@ Describe "Invoke-MedocUpdateCheck - Main Orchestrator Function" {
                 ChatId        = "12345"
             }
 
+            Mock -ModuleName MedocUpdateCheck -CommandName Test-Path { $false } -ParameterFilter {
+                $Path -match 'MedocUpdateCheck.*checkpoints'
+            }
             Mock -ModuleName MedocUpdateCheck -CommandName New-Item { throw "Access denied" } -ParameterFilter {
                 $ItemType -eq 'Directory' -and $Path -match 'MedocUpdateCheck' -and $Path -match 'checkpoints'
             }
@@ -1959,6 +1970,9 @@ Describe "Integration Tests - Comprehensive Marker-Based Detection Scenarios" {
             # Operation detection requires BOTH start and completion markers
             # Missing completion means operation block not found at all
             $result.OperationFound | Should -Be $false
+            # But version marker should still be detected
+            $result.MarkerVersionConfirm | Should -Be $true
+            $result.MarkerCompletionMarker | Should -Be $false
         }
 
         It "Should handle missing completion marker gracefully" {
@@ -2079,6 +2093,9 @@ Describe "Integration Tests - Comprehensive Marker-Based Detection Scenarios" {
             $resultMissingC.Status | Should -Be "Failed"
             # Operation detection requires both markers
             $resultMissingC.OperationFound | Should -Be $false
+            # But version marker should still be detected
+            $resultMissingC.MarkerVersionConfirm | Should -Be $true
+            $resultMissingC.MarkerCompletionMarker | Should -Be $false
         }
 
         It "Missing version marker in operation block is detected" {

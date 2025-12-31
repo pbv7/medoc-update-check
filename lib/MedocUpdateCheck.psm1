@@ -185,7 +185,7 @@ function Format-UpdateEventLogMessage {
         } else {
             # FAILURE case: Include marker details for automated alerting, include reason
             $startTime = if ($UpdateResult.UpdateStartTime) { $UpdateResult.UpdateStartTime.ToString('dd.MM.yyyy HH:mm:ss') } else { "N/A" }
-            $markerDetails = "MarkerV=$($UpdateResult.MarkerVersionConfirm) | MarkerC=$($UpdateResult.MarkerCompletionMarker)"
+            $markerDetails = "MarkerV=$($UpdateResult.MarkerVersionConfirm) | MarkerC=$($UpdateResult.MarkerCompletionMarker) | OpFound=$($UpdateResult.OperationFound)"
 
             return "Server=$ServerName | Status=UPDATE_FAILED | FromVersion=$($UpdateResult.FromVersion) | ToVersion=$($UpdateResult.ToVersion) | UpdateStarted=$startTime | $markerDetails | Reason=$($UpdateResult.Reason) | CheckTime=$CheckTime"
         }
@@ -370,17 +370,34 @@ function Test-UpdateState {
     # Step 1: Find the last update operation
     $operationResult = Find-LastUpdateOperation -UpdateLogContent $UpdateLogContent
 
+    # Step 2: Test markers
+    # If operation block not found, still check for version marker in full log content
+    # This provides more granular feedback when completion marker is missing
     if (-not $operationResult.Found) {
+        # Check for version marker in the full log content
+        $versionPattern = "Версія\s+програми\s*-\s*$([regex]::Escape($TargetVersion))\b"
+        $hasVersionConfirm = $UpdateLogContent -match $versionPattern
+
+        # Completion marker is definitely false (operation block not found)
+        $hasCompletionMarker = $false
+
+        # Determine more specific failure message
+        $message = if ($hasVersionConfirm) {
+            "Missing completion marker (operation incomplete)"
+        } else {
+            "No update operation found in log"
+        }
+
         return @{
             Status            = "Failed"
-            VersionConfirm    = $false
-            CompletionMarker  = $false
+            VersionConfirm    = $hasVersionConfirm
+            CompletionMarker  = $hasCompletionMarker
             OperationFound    = $false
-            Message           = "No update operation found in log"
+            Message           = $message
         }
     }
 
-    # Step 2: Test markers in the operation block
+    # Operation block found - test markers within it
     $markerResult = Test-UpdateMarker -OperationContent $operationResult.Content `
                                       -TargetVersion $TargetVersion
 
@@ -888,7 +905,8 @@ function Invoke-MedocUpdateCheck {
         if ($env:ProgramData) {
             $baseDir = $env:ProgramData
         } elseif ($IsLinux -or $IsMacOS) {
-            $baseDir = if (Test-Path "/var/lib") { "/var/lib" } else { "$env:HOME/.local/share" }
+            # Prefer user-writable XDG data directory path
+            $baseDir = if ($env:XDG_DATA_HOME) { $env:XDG_DATA_HOME } else { "$env:HOME/.local/share" }
         } else {
             # Fallback for unknown systems
             $baseDir = $env:HOME
