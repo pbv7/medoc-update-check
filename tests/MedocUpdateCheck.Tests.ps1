@@ -546,8 +546,14 @@ Describe "Write-EventLogEntry - Event Log Handling" {
             }
 
             It "Should warn when creating source fails" {
-                Mock Invoke-EventLogSourceExists { $false }
-                Mock Invoke-CreateEventLogSource { throw "Access denied" }
+                Mock Invoke-EventLogSourceExists {
+                    param($EventLogSource)
+                    $false
+                }
+                Mock Invoke-CreateEventLogSource {
+                    param($EventLogSource, $EventLogName)
+                    throw "Access denied"
+                }
 
                 Write-EventLogEntry -Message "Test entry" -EventType Error -EventId 2001
 
@@ -556,8 +562,14 @@ Describe "Write-EventLogEntry - Event Log Handling" {
             }
 
             It "Should warn when event log handle creation fails" {
-                Mock Invoke-EventLogSourceExists { $true }
-                Mock New-EventLogHandle { throw "No event log" }
+                Mock Invoke-EventLogSourceExists {
+                    param($EventLogSource)
+                    $true
+                }
+                Mock New-EventLogHandle {
+                    param($EventLogName)
+                    throw "No event log"
+                }
 
                 Write-EventLogEntry -Message "Test entry" -EventType Warning -EventId 2002
 
