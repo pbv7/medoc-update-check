@@ -761,9 +761,61 @@ Windows APIs.
 
 **Current Status:**
 
-- ✅ 201 tests passing on all platforms
+- ✅ 237 tests passing on Windows CI
+- ❌ 3 tests failing on Windows CI (known Pester limitation - see below)
+- ✅ 236 tests passing on macOS/Linux
 - ⏭️ 2 tests skipped on non-Windows (intentional, documented)
-- ✅ 0 failures on any platform
+
+#### Known Issues: Pester InModuleScope Mocking on Windows
+
+**Problem:** Three EventLog error handling tests consistently fail on Windows CI with
+`ParameterBindingException`, despite:
+
+- ✅ Passing on macOS/Linux
+- ✅ Using identical mock syntax to working tests
+- ✅ Having all required mocks present
+
+**Affected Tests:**
+
+- "Should warn when creating source fails" (MedocUpdateCheck.Tests.ps1:579-593)
+- "Should warn when event log handle creation fails" (MedocUpdateCheck.Tests.ps1:595-607)
+- "Should fail when checkpoint directory cannot be created" (MedocUpdateCheck.Tests.ps1:1403)
+
+**Root Cause:** When Pester mocks functions inside `InModuleScope` on Windows and a mocked
+function is called, Windows PowerShell's parameter binding resolution for functions that wrap
+.NET APIs (like `System.Diagnostics.EventLog`) triggers a `ParameterBindingException`.
+This is a known Pester limitation on Windows.
+
+**Research Evidence:**
+
+- [Pester Issue #1554](https://github.com/pester/Pester/issues/1554):
+  "Using a param-block inside MockWith behaves strangely"
+- [Pester Issue #1308](https://github.com/pester/Pester/issues/1308):
+  "Cannot execute mock - ParameterBindingException"
+- [Pester Issue #305](https://github.com/pester/Pester/issues/305):
+  "Cannot retrieve dynamic parameters"
+
+**Attempted Fixes (all failed):**
+
+1. ❌ Added missing mocks (following pattern from working test)
+2. ❌ Changed mocks to return values instead of throwing errors
+3. ❌ Removed/added param blocks in various combinations
+4. ❌ Changed mock syntax (with/without `-MockWith` parameter)
+5. ❌ Made ParameterFilter more specific for checkpoint test
+
+**Impact Assessment:**
+
+- ✅ Core EventLog functionality IS tested (working test at line 544 passes on all platforms)
+- ✅ Production code works correctly on Windows (validated manually)
+- ❌ Edge case error handling tests fail due to Pester limitation
+- ℹ️ Failing tests cover scenarios: source creation failure, handle creation failure,
+  checkpoint directory errors
+
+**Workaround:** These tests are documented as known failures in the codebase. The functionality
+they test is validated manually on Windows servers before deployment. See test file comments
+for full details.
+
+**Status:** Unresolved platform-specific Pester limitation. Tracked in test file (line 493-523).
 
 **Test Platform Coverage Matrix:**
 

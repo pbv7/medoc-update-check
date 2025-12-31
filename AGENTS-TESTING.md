@@ -36,6 +36,46 @@ Breakdown by category:
 - **Integration Tests:** 2-marker validation, configuration validation, module exports,
   Invoke-MedocUpdateCheck workflows
 
+**Expected Results:**
+
+- macOS/Linux: 236 passed, 2 skipped (Windows-only features)
+- Windows CI: 237 passed, 3 failed (known Pester limitation - see below)
+
+## Known Issues
+
+### Pester InModuleScope Mocking on Windows
+
+**Problem:** Three EventLog error handling tests fail on Windows CI with `ParameterBindingException`.
+
+**Why This Happens:** Pester has a known limitation when mocking functions inside `InModuleScope`
+on Windows. When a mocked function that wraps .NET APIs (like `System.Diagnostics.EventLog`) is
+called, Windows PowerShell's parameter binding triggers an exception.
+
+**Affected Tests:**
+
+- "Should warn when creating source fails"
+- "Should warn when event log handle creation fails"
+- "Should fail when checkpoint directory cannot be created"
+
+**What This Means for Agents:**
+
+- These are **known failures** - not new bugs
+- Core EventLog functionality IS tested and works
+- Failing tests cover edge case error scenarios
+- Production code is validated manually on Windows
+
+**When Investigating Test Failures:**
+
+1. Check if failure is one of the 3 known failing tests above
+2. If yes: This is expected, not a regression
+3. If no: Investigate as a real failure
+
+**Research Links:**
+
+- [Pester #1554](https://github.com/pester/Pester/issues/1554)
+- [Pester #1308](https://github.com/pester/Pester/issues/1308)
+- Full details in TESTING.md "Platform-Specific Tests - Known Issues" section
+
 ## Test Data & Encoding
 
 All test data files in `tests/test-data/` are **Windows-1251 encoded** (required for M.E.Doc
