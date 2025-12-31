@@ -554,6 +554,10 @@ Describe "Write-EventLogEntry - Event Log Handling" {
                     param($EventLogSource, $EventLogName)
                     throw "Access denied"
                 }
+                Mock New-EventLogHandle {
+                    param($EventLogName)
+                    throw "Should not be called in this test"
+                }
 
                 Write-EventLogEntry -Message "Test entry" -EventType Error -EventId 2001
 
@@ -565,6 +569,10 @@ Describe "Write-EventLogEntry - Event Log Handling" {
                 Mock Invoke-EventLogSourceExists {
                     param($EventLogSource)
                     $true
+                }
+                Mock Invoke-CreateEventLogSource {
+                    param($EventLogSource, $EventLogName)
+                    throw "Should not be called in this test"
                 }
                 Mock New-EventLogHandle {
                     param($EventLogName)
