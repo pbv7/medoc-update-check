@@ -11,48 +11,15 @@ This document provides a step-by-step checklist for deploying M.E.Doc Update Che
 
 ---
 
-## 1. Quick Start: Getting the Code
+## 1. Getting the Code
 
-Choose one method to obtain the latest release:
+### ☐ Download Latest Release
 
-### Option A: Download Automatically (Recommended for Remote Servers)
+Visit the [Latest Release page](https://github.com/pbv7/medoc-update-check/releases/latest) and download the ZIP file.
 
-Run this on the target server to download and extract the latest release:
-
-```powershell
-# Choose location for operational scripts
-New-Item -ItemType Directory -Path 'C:\Apps' | Out-Null   # If missing
-Set-Location 'C:\Apps'
-
-# Download and extract latest release
-$release = Invoke-RestMethod -Uri 'https://api.github.com/repos/pbv7/medoc-update-check/releases/latest'
-$version = $release.tag_name
-$zipUrl = $release.zipball_url
-$zipName = "medoc-update-check-$version.zip"
-
-Invoke-WebRequest -Uri $zipUrl -OutFile $zipName
-Expand-Archive -Path $zipName -DestinationPath . -Force
-
-# Find extracted folder and rename it
-$extractedFolder = Get-ChildItem -Directory |
-    Where-Object { $_.Name -match 'pbv7-medoc-update-check' } |
-    Sort-Object -Property LastWriteTime -Descending |
-    Select-Object -First 1
-
-if ($extractedFolder) {
-    Move-Item -Path $extractedFolder.FullName -Destination "./medoc-update-check" -Force
-    Write-Host "✅ Extracted: $($extractedFolder.Name) → medoc-update-check"
-} else {
-    Write-Host "❌ Error: No extracted folder found"
-}
-
-# Cleanup zip file
-Remove-Item $zipName -Force
-```
-
-### Option B: Download Manually
-
-Visit [Latest Release page](https://github.com/pbv7/medoc-update-check/releases/latest), download the ZIP file, and extract manually.
+**You can download either:**
+- **On target server** (for single server deployment) → extract to `C:\Apps\medoc-update-check`
+- **On your workstation** (for multi-server deployment) → extract locally, then copy to servers in Step 1
 
 ---
 
@@ -126,28 +93,23 @@ For automated scheduling, the script runs as:
 
 Follow these steps sequentially for each server.
 
-### ☐ Step 1: Copy Project Files
+### ☐ Step 1: Get Files to Target Server
 
-Get the code to the target server using one of these methods:
+Choose the method that matches where you downloaded in Section 1:
 
-#### Method A: From Local Machine via Network Share
+#### If Downloaded on Target Server
 
-Remote deployment from your local machine:
+Files should already be at `C:\Apps\medoc-update-check` - skip to verification below.
+
+#### If Downloaded on Local Workstation
+
+Copy files to target server:
 
 ```powershell
-# From your local machine, copy to target server
-robocopy "C:\Source\MedocUpdateCheck" "\\TARGET_SERVER\C$\Script\MedocUpdateCheck" /E
+# From your local machine, copy to target server via network share
+robocopy "C:\Apps\medoc-update-check" "\\TARGET_SERVER\C$\Apps\medoc-update-check" /E
 
 # Or use RDP/File Explorer to copy manually
-```
-
-#### Method B: Download on Target Server
-
-If you already downloaded on the target server (see Section 1, Option A):
-
-```powershell
-# If you already downloaded using Option A above, this step is complete
-# Verify files exist in C:\Apps\medoc-update-check
 ```
 
 **Verify files copied correctly:**
@@ -209,10 +171,13 @@ cd C:\Apps\medoc-update-check
 # Copy the template using your server's hostname automatically
 # No need to manually type your server name - it uses $env:COMPUTERNAME
 cp configs\Config.template.ps1 "configs\Config-$env:COMPUTERNAME.ps1"
+```
 
-# Then edit the config file with correct paths
+**Now edit the config file** `configs\Config-$env:COMPUTERNAME.ps1` and update:
+
+```powershell
 # Update this line with actual path to M.E.Doc logs directory
-MedocLogsPath = "D:\MedocSRV\LOG"
+MedocLogsPath = "D:\MedocSRV\LOG"  # ← Change this to your actual logs path
 
 # Optional: Set custom server name (if not using auto-detect)
 # Uncomment and modify:
@@ -290,19 +255,7 @@ Get-WinEvent -FilterHashtable @{
 
 Run as Administrator:
 
-#### PowerShell 7+ Required
-
-Before running the setup script, verify PowerShell 7+ is installed:
-
-```powershell
-pwsh -Command '$PSVersionTable.PSVersion'
-# Expected output: 7.x or higher
-```
-
-If not installed, follow [Microsoft's Installation Guide](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows).
-
-The setup script will automatically detect PowerShell 7+ and create the task to use it. If
-PowerShell 7+ is not found, the script will fail with a clear error message.
+**Note:** PowerShell 7+ is required (verified in Section 2.2). The setup script will automatically detect and use PowerShell 7+.
 
 #### Setup Command
 
