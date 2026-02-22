@@ -152,7 +152,7 @@ The system validates update success by checking for **2 critical markers** in th
 
 **Outcome:** FAILED (ErrorId=1302)
 
-- OperationFound: false (because completion marker missing - cannot identify operation block)
+- OperationFound: true (operation start is found, but completion marker is missing)
 - Success: false
 
 **Use case:** Validate detection of interrupted/incomplete updates where the update
@@ -161,7 +161,7 @@ process started but did not finish (suspicious: update triggered but logs incomp
 **Test Coverage:**
 
 - Detects missing completion marker
-- Correctly identifies operation as NOT found
+- Correctly identifies operation as found but incomplete
 - Distinguishes from "no update" case (operation WAS detected, just incomplete)
 - Provides appropriate failure message
 

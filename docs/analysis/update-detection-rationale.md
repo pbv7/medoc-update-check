@@ -33,7 +33,8 @@ This document captures the reasoning behind the 2-marker validation model for M.
 - Planner timestamps use 4-digit year (`dd.MM.yyyy`); update logs use 2-digit year (`dd.MM.yy`).
 - Since ~17.02.2026, update logs may use multi-phase naming
   (`update=PID_YYYY-MM-DD.log`); `Find-UpdateLogFile` discovers the correct
-  file with fallback to the legacy `update_YYYY-MM-DD.log` format.
+  file by trying legacy `update_YYYY-MM-DD.log` first and falling back to
+  `update=PID_YYYY-MM-DD.log`.
 
 ## Event IDs (Relevant Range)
 

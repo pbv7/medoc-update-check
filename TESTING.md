@@ -765,10 +765,9 @@ Windows APIs.
 
 **Current Status:**
 
-- ✅ 237 tests passing on Windows CI
-- ❌ 3 tests failing on Windows CI (known Pester limitation - see below)
-- ✅ 236 tests passing on macOS/Linux
-- ⏭️ 2 tests skipped on non-Windows (intentional, documented)
+- Run `./tests/Run-Tests.ps1` for current pass/fail/skip counts on your platform.
+- Some Windows-specific tests are intentionally skipped on non-Windows platforms.
+- Three Windows CI failures are currently known (Pester limitation documented below).
 
 #### Known Issues: Pester InModuleScope Mocking on Windows
 
@@ -2066,7 +2065,9 @@ Message: "No update detected since last check at 28.10.2025 22:33:26"
 
 1. Run update check
 2. Function finds update entry in Planner.log
-3. Finds corresponding update log via `Find-UpdateLogFile` (checks `update=PID_YYYY-MM-DD.log` first, falls back to `update_YYYY-MM-DD.log`)
+3. Finds corresponding update log via `Find-UpdateLogFile`
+   (checks `update_YYYY-MM-DD.log` classic format first,
+   falls back to `update=PID_YYYY-MM-DD.log` new format)
 4. Checks for 2 critical markers:
    - ✅ Marker V found: Version confirmation present
    - ✅ Marker C found: Completion marker present

@@ -38,8 +38,8 @@ Breakdown by category:
 
 **Expected Results:**
 
-- macOS/Linux: 236 passed, 2 skipped (Windows-only features)
-- Windows CI: 237 passed, 3 failed (known Pester limitation - see below)
+- Run `./tests/Run-Tests.ps1` for current pass/fail/skip counts on your platform.
+- Windows CI has known platform-specific failures (see below).
 
 ## Known Issues
 

@@ -693,9 +693,7 @@ Describe "Error Handling and Edge Cases" {
             $result.ErrorId | Should -Be ([MedocEventId]::EncodingError)
         }
 
-        It "Should treat unreadable update log as missing when no fallback available" {
-            # When Find-UpdateLogFile can't read the classic file, it falls through to
-            # search for new-format files. If none found, the result is UpdateLogMissing.
+        It "Should surface encoding errors for update log during discovery" {
             $logsDir = Join-Path $script:testDataDir "success-both-markers"
             $updateLogPath = Join-Path $logsDir "update_2025-10-23.log"
 
@@ -703,8 +701,8 @@ Describe "Error Handling and Edge Cases" {
 
             $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir -ErrorAction SilentlyContinue
 
-            $result.Status | Should -Be "Failed"
-            $result.ErrorId | Should -Be ([MedocEventId]::UpdateLogMissing)
+            $result.Status | Should -Be "Error"
+            $result.ErrorId | Should -Be ([MedocEventId]::EncodingError)
         }
     }
 
@@ -2194,6 +2192,7 @@ Describe "Find-UpdateLogFile - Update Log Discovery with Format Fallback" {
             $result = Find-UpdateLogFile -MedocLogsPath $logsDir -UpdateLogDate "2025-10-23" -Encoding $script:encoding1251
 
             $result | Should -Not -BeNullOrEmpty
+            $result.Status | Should -Be "Found"
             $result.Format | Should -Be "classic"
             $result.Path | Should -Match "update_2025-10-23\.log$"
         }
@@ -2205,6 +2204,7 @@ Describe "Find-UpdateLogFile - Update Log Discovery with Format Fallback" {
             $result = Find-UpdateLogFile -MedocLogsPath $logsDir -UpdateLogDate "2025-10-23" -Encoding $script:encoding1251
 
             $result | Should -Not -BeNullOrEmpty
+            $result.Status | Should -Be "Found"
             $result.Format | Should -Be "new"
             $result.Path | Should -Match "update=12345_2025-10-23\.log$"
         }
@@ -2214,6 +2214,7 @@ Describe "Find-UpdateLogFile - Update Log Discovery with Format Fallback" {
             $result = Find-UpdateLogFile -MedocLogsPath $logsDir -UpdateLogDate "2025-10-23" -Encoding $script:encoding1251
 
             $result | Should -Not -BeNullOrEmpty
+            $result.Status | Should -Be "Found"
             $result.Format | Should -Be "new"
             $result.Path | Should -Match "update=12345_2025-10-23\.log$"
         }
@@ -2225,25 +2226,118 @@ Describe "Find-UpdateLogFile - Update Log Discovery with Format Fallback" {
             $result = Find-UpdateLogFile -MedocLogsPath $logsDir -UpdateLogDate "2025-10-23" -Encoding $script:encoding1251
 
             $result | Should -Not -BeNullOrEmpty
+            $result.Status | Should -Be "Found"
             $result.Format | Should -Be "new"
             # Should select update=22222 (Upgrade), not update=11111 (self-update)
             $result.Path | Should -Match "update=22222_2025-10-23\.log$"
         }
+
+        It "Should select the newest matching file by LastWriteTime" {
+            $tempLogs = Join-Path ([System.IO.Path]::GetTempPath()) ("MedocLogs_{0}" -f ([System.Guid]::NewGuid().ToString('N')))
+            New-Item -ItemType Directory -Path $tempLogs -Force | Out-Null
+            $script:tempDirectories += $tempLogs
+
+            $fileOld = Join-Path $tempLogs "update=10000_2025-10-23.log"
+            $fileNew = Join-Path $tempLogs "update=90000_2025-10-23.log"
+            $upgradeContent = @(
+                '23.10.25 10:30:15.100 00000001 INFO    Початок роботи, операція "Оновлення"'
+                '23.10.25 10:48:37.800 00000001 INFO    Версія програми - 186'
+                '23.10.25 10:48:37.850 00000001 INFO    Завершення роботи, операція "Оновлення"'
+            )
+
+            [System.IO.File]::WriteAllLines($fileOld, $upgradeContent, $script:encoding1251)
+            [System.IO.File]::WriteAllLines($fileNew, $upgradeContent, $script:encoding1251)
+            (Get-Item $fileOld).LastWriteTime = [datetime]"2025-10-23 10:00:00"
+            (Get-Item $fileNew).LastWriteTime = [datetime]"2025-10-23 11:00:00"
+
+            $result = Find-UpdateLogFile -MedocLogsPath $tempLogs -UpdateLogDate "2025-10-23" -Encoding $script:encoding1251
+
+            $result.Status | Should -Be "Found"
+            $result.Format | Should -Be "new"
+            $result.Path | Should -Be $fileNew
+        }
+
+        It "Should use Name descending as deterministic tie-breaker for equal LastWriteTime" {
+            $tempLogs = Join-Path ([System.IO.Path]::GetTempPath()) ("MedocLogs_{0}" -f ([System.Guid]::NewGuid().ToString('N')))
+            New-Item -ItemType Directory -Path $tempLogs -Force | Out-Null
+            $script:tempDirectories += $tempLogs
+
+            $fileLow = Join-Path $tempLogs "update=10000_2025-10-23.log"
+            $fileHigh = Join-Path $tempLogs "update=90000_2025-10-23.log"
+            $upgradeContent = @(
+                '23.10.25 10:30:15.100 00000001 INFO    Початок роботи, операція "Оновлення"'
+                '23.10.25 10:48:37.800 00000001 INFO    Версія програми - 186'
+                '23.10.25 10:48:37.850 00000001 INFO    Завершення роботи, операція "Оновлення"'
+            )
+
+            [System.IO.File]::WriteAllLines($fileLow, $upgradeContent, $script:encoding1251)
+            [System.IO.File]::WriteAllLines($fileHigh, $upgradeContent, $script:encoding1251)
+            $sameWriteTime = [datetime]"2025-10-23 12:00:00"
+            (Get-Item $fileLow).LastWriteTime = $sameWriteTime
+            (Get-Item $fileHigh).LastWriteTime = $sameWriteTime
+
+            $result = Find-UpdateLogFile -MedocLogsPath $tempLogs -UpdateLogDate "2025-10-23" -Encoding $script:encoding1251
+
+            $result.Status | Should -Be "Found"
+            $result.Format | Should -Be "new"
+            $result.Path | Should -Be $fileHigh
+        }
     }
 
     Context "No matching files" {
-        It "Should return null when no update log exists for the date" {
+        It "Should return NotFound when no update log exists for the date" {
             $logsDir = Join-Path $script:testDataDir "failure-no-update-log"
             $result = Find-UpdateLogFile -MedocLogsPath $logsDir -UpdateLogDate "2025-10-23" -Encoding $script:encoding1251
 
-            $result | Should -BeNullOrEmpty
+            $result.Status | Should -Be "NotFound"
         }
 
-        It "Should return null when no update detected at all" {
+        It "Should return NotFound when no update detected at all" {
             $logsDir = Join-Path $script:testDataDir "failure-no-update-detected"
             $result = Find-UpdateLogFile -MedocLogsPath $logsDir -UpdateLogDate "2099-01-01" -Encoding $script:encoding1251
 
-            $result | Should -BeNullOrEmpty
+            $result.Status | Should -Be "NotFound"
+        }
+
+        It "Should return NotFound when candidate files do not contain Upgrade operation" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $classicPath = Join-Path $logsDir "update_2025-10-23.log"
+            Mock -ModuleName MedocUpdateCheck -CommandName Get-Content -ParameterFilter { $Path -eq $classicPath } -MockWith {
+                '23.10.25 10:25:00.100 00000001 INFO    Початок роботи, операція "Розпакування"'
+            }
+
+            $result = Find-UpdateLogFile -MedocLogsPath $logsDir -UpdateLogDate "2025-10-23" -Encoding $script:encoding1251
+
+            $result.Status | Should -Be "NotFound"
+        }
+    }
+
+    Context "Read error handling" {
+        It "Should return ReadError when classic file cannot be read and no new-format files exist" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $classicPath = Join-Path $logsDir "update_2025-10-23.log"
+            Mock -ModuleName MedocUpdateCheck -CommandName Get-Content -ParameterFilter { $Path -eq $classicPath } -MockWith {
+                throw "Encoding failed"
+            }
+
+            $result = Find-UpdateLogFile -MedocLogsPath $logsDir -UpdateLogDate "2025-10-23" -Encoding $script:encoding1251
+
+            $result.Status | Should -Be "ReadError"
+            $result.Path | Should -Be $classicPath
+            $result.ErrorMessage | Should -Match "Encoding failed"
+        }
+
+        It "Should return ReadError when all candidate files fail to read" {
+            $logsDir = Join-Path $script:testDataDir "success-new-format-with-extraction"
+            Mock -ModuleName MedocUpdateCheck -CommandName Get-Content -MockWith {
+                throw "I/O read failure"
+            }
+
+            $result = Find-UpdateLogFile -MedocLogsPath $logsDir -UpdateLogDate "2025-10-23" -Encoding $script:encoding1251
+
+            $result.Status | Should -Be "ReadError"
+            $result.Path | Should -Not -BeNullOrEmpty
+            $result.ErrorMessage | Should -Match "I/O read failure"
         }
     }
 }

@@ -440,9 +440,13 @@ function Find-UpdateLogFile {
         1. Try update_YYYY-MM-DD.log (old format) - if it contains the "Оновлення" operation
            (not just "Розпакування"), return it as "classic" format
         2. If old file is missing OR only has extraction phase: search for update=*_YYYY-MM-DD.log
+           and check newest files first (deterministic ordering by LastWriteTime, then Name)
         3. Among new-format matches, find the one containing 'Початок роботи, операція "Оновлення"'
            (exact match - not "Оновлення update.exe")
-        4. Return $null if no suitable file found
+        4. Return structured discovery result:
+           - Found: suitable file discovered
+           - NotFound: no suitable file found
+           - ReadError: at least one candidate file could not be read, and no suitable file was found
 
     .PARAMETER MedocLogsPath
         Directory containing M.E.Doc log files
@@ -454,7 +458,10 @@ function Find-UpdateLogFile {
         System.Text.Encoding object for reading log files
 
     .OUTPUTS
-        Hashtable @{ Path = [string]; Format = "classic" | "new" } or $null if not found
+        Hashtable with status-aware discovery result:
+        - @{ Status = "Found"; Path = [string]; Format = "classic" | "new" }
+        - @{ Status = "NotFound" }
+        - @{ Status = "ReadError"; ErrorMessage = [string]; Path = [string] }
     #>
     param(
         [Parameter(Mandatory = $true)]
@@ -472,6 +479,11 @@ function Find-UpdateLogFile {
     # Uses negative lookahead to reject "Оновлення update.exe" while accepting "Оновлення".
     $upgradeOperationPattern = 'операція "Оновлення(?! update\.exe)"'
 
+    # Track last read failure for diagnostics when no suitable file is found
+    $hadReadError = $false
+    $lastReadErrorMessage = $null
+    $lastReadErrorPath = $null
+
     # Step 1: Try classic format (update_YYYY-MM-DD.log)
     $classicPath = Join-Path $MedocLogsPath "update_$UpdateLogDate.log"
     if (Test-Path $classicPath) {
@@ -479,33 +491,45 @@ function Find-UpdateLogFile {
             $content = Get-Content $classicPath -Encoding $Encoding -Raw
             # Check if this file contains the actual Upgrade operation (not just Розпакування)
             if ($content -match $upgradeOperationPattern) {
-                return @{ Path = $classicPath; Format = "classic" }
+                return @{ Status = "Found"; Path = $classicPath; Format = "classic" }
             }
         } catch {
-            # If we can't read the classic file, fall through to new format search
+            # Keep searching: a readable new-format file may still exist
+            $hadReadError = $true
+            $lastReadErrorPath = $classicPath
+            $lastReadErrorMessage = $_.Exception.Message
         }
     }
 
     # Step 2: Search for new format files (update=PID_YYYY-MM-DD.log)
-    $newFormatFiles = @(Get-ChildItem -Path $MedocLogsPath -Filter "update=*_$UpdateLogDate.log" -File -ErrorAction SilentlyContinue)
-
-    if ($newFormatFiles.Count -eq 0) {
-        return $null
-    }
+    # Sort deterministically to ensure repeatable file selection when multiple matches exist
+    $newFormatFiles = @(Get-ChildItem -Path $MedocLogsPath -Filter "update=*_$UpdateLogDate.log" -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime, Name -Descending)
 
     # Step 3: Find the file containing the Upgrade phase operation
     foreach ($file in $newFormatFiles) {
         try {
             $content = Get-Content $file.FullName -Encoding $Encoding -Raw
             if ($content -match $upgradeOperationPattern) {
-                return @{ Path = $file.FullName; Format = "new" }
+                return @{ Status = "Found"; Path = $file.FullName; Format = "new" }
             }
         } catch {
+            $hadReadError = $true
+            $lastReadErrorPath = $file.FullName
+            $lastReadErrorMessage = $_.Exception.Message
             continue
         }
     }
 
-    return $null
+    if ($hadReadError) {
+        return @{
+            Status = "ReadError"
+            ErrorMessage = $lastReadErrorMessage
+            Path = $lastReadErrorPath
+        }
+    }
+
+    return @{ Status = "NotFound" }
 }
 
 function Test-UpdateOperationSuccess {
@@ -515,7 +539,8 @@ function Test-UpdateOperationSuccess {
         (supports both update_YYYY-MM-DD.log and update=PID_YYYY-MM-DD.log formats)
 
     .PARAMETER MedocLogsPath
-        Directory containing Planner.log and update_YYYY-MM-DD.log files
+        Directory containing Planner.log and update log files
+        (update_YYYY-MM-DD.log or update=PID_YYYY-MM-DD.log)
 
     .PARAMETER SinceTime
         Optional: Only search for updates after this timestamp (for checkpoint filtering)
@@ -535,7 +560,7 @@ function Test-UpdateOperationSuccess {
         - UpdateStartTime: When update process started (from update log)
         - UpdateEndTime: When update process completed (from update log)
         - UpdateDuration: Duration in seconds
-        - UpdateLogPath: Full path to update_YYYY-MM-DD.log
+        - UpdateLogPath: Path to classic or new-format update log
         - MarkerVersionConfirm: $true if "Версія програми - {VERSION}" found
         - MarkerCompletionMarker: $true if completion marker found
         - OperationFound: $true if operation block boundaries were identified
@@ -545,7 +570,7 @@ function Test-UpdateOperationSuccess {
         Strategy: Dual-log validation
         1. Detect update trigger in Planner.log: "Завантаження оновлення ezvit.X.X.X-X.X.X.upd"
         2. Extract target version from update filename
-        3. Find and parse update_YYYY-MM-DD.log (FAILURE if missing)
+        3. Find and parse update log (FAILURE if missing, ERROR if unreadable)
         4. Verify both required markers:
            - Version confirmation: Версія програми - {TARGET_VERSION}
            - Completion marker: Завершення роботи, операція "Оновлення"
@@ -660,7 +685,20 @@ function Test-UpdateOperationSuccess {
     $updateLogDate = $updateTime.ToString('yyyy-MM-dd')
     $logFileResult = Find-UpdateLogFile -MedocLogsPath $MedocLogsPath -UpdateLogDate $updateLogDate -Encoding $Encoding
 
-    if (-not $logFileResult) {
+    if ($logFileResult.Status -eq "ReadError") {
+        $failedPath = if ($logFileResult.Path) { $logFileResult.Path } else { Join-Path $MedocLogsPath "update_$updateLogDate.log" }
+        $errorDetails = if ($logFileResult.ErrorMessage) { $logFileResult.ErrorMessage } else { "Unknown read error during update log discovery" }
+        $errorMsg = "Error reading update log during discovery for date $updateLogDate at $failedPath with encoding $EncodingCodePage : $errorDetails`n"
+        $errorMsg += "$encodingTroubleshoot "
+        $errorMsg += "Ensure update log file is accessible and not locked by another process."
+        Write-EventLogEntry -Message $errorMsg -EventType Error -EventId ([MedocEventId]::EncodingError)
+        Write-Error $errorMsg
+        return @{
+            Status  = "Error"
+            ErrorId = [MedocEventId]::EncodingError
+            Message = $errorMsg
+        }
+    } elseif ($logFileResult.Status -eq "NotFound") {
         # No suitable update log found in either format = FAILURE
         $updateLogPath = Join-Path $MedocLogsPath "update_$updateLogDate.log"
         return @{
@@ -679,6 +717,15 @@ function Test-UpdateOperationSuccess {
             MarkerCompletionMarker = $false
             OperationFound         = $false
             Reason                 = "Update log file not found (validation skipped because update log is missing)"
+        }
+    } elseif ($logFileResult.Status -ne "Found") {
+        $errorMsg = "Unexpected update log discovery status: $($logFileResult.Status)"
+        Write-EventLogEntry -Message $errorMsg -EventType Error -EventId ([MedocEventId]::GeneralError)
+        Write-Error $errorMsg
+        return @{
+            Status  = "Error"
+            ErrorId = [MedocEventId]::GeneralError
+            Message = $errorMsg
         }
     }
 
@@ -880,7 +927,8 @@ function Invoke-MedocUpdateCheck {
     .PARAMETER Config
         Hashtable with configuration (required keys):
         - ServerName: Display name for this server
-        - MedocLogsPath: Path to M.E.Doc logs directory (containing Planner.log and update_YYYY-MM-DD.log)
+        - MedocLogsPath: Path to M.E.Doc logs directory (containing Planner.log and update log files:
+          update_YYYY-MM-DD.log or update=PID_YYYY-MM-DD.log)
         - BotToken: Telegram bot token
         - ChatId: Telegram chat/channel ID
 

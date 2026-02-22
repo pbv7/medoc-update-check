@@ -1602,7 +1602,7 @@ Before creating a release:
 ```powershell
 # 1. All tests passing
 ./tests/Run-Tests.ps1
-# Expected: 201 tests passing
+# Expected: all tests passing
 
 # 2. No uncommitted changes
 git status
