@@ -147,7 +147,7 @@ Minimal config needed:
 ```powershell
 $config = @{
     ServerName = $env:COMPUTERNAME  # Auto-detected
-    MedocLogsPath = "D:\MedocSRV\LOG"  # Directory containing both Planner.log and update_*.log
+    MedocLogsPath = "D:\MedocSRV\LOG"  # Directory containing Planner.log and update log files
     BotToken = $telegramCreds.BotToken  # Loaded from encrypted file
     ChatId = $telegramCreds.ChatId      # Loaded from encrypted file
 
@@ -211,7 +211,7 @@ Each server config is created by copying `configs/Config.template.ps1` and custo
 | Setting | Description | Example |
 |---------|-------------|---------|
 | `ServerName` | Display name in Telegram messages | `"YOUR_SERVER_NAME"` |
-| `MedocLogsPath` | Path to M.E.Doc logs directory | `"D:\MedocSRV\LOG"` (contains both Planner.log and update_*.log) |
+| `MedocLogsPath` | Path to M.E.Doc logs directory | `"D:\MedocSRV\LOG"` (contains Planner.log and update log files) |
 | `BotToken` | Telegram bot API token from BotFather | `"NUMERIC_ID:ALPHANUMERIC_TOKEN"` (keep private!) |
 | `ChatId` | Telegram chat or channel ID | `"YOUR_CHAT_ID_HERE"` (positive or negative number) |
 
@@ -441,7 +441,14 @@ dd.MM.yyyy H:mm:ss Event Text
 
 **Timestamp format:** 4-digit year (DD.MM.YYYY)
 
-#### update_*.log (Update Execution Log)
+#### Update Execution Log
+
+M.E.Doc uses two naming conventions for update execution logs:
+
+- **Legacy (single-phase):** `update_YYYY-MM-DD.log` — one file per update
+- **Multi-phase (since ~17.02.2026):** `update=PID_YYYY-MM-DD.log` — separate file per phase (Extraction, Self-update, Upgrade)
+
+The `Find-UpdateLogFile` function handles discovery of both formats with automatic fallback.
 
 ```text
 dd.MM.yy H:mm:ss.mmm XXXXXXXX LEVEL Message
@@ -454,8 +461,8 @@ dd.MM.yy H:mm:ss.mmm XXXXXXXX LEVEL Message
 **Log fields:** 2-digit year, milliseconds, 8-digit ID, log level, message
 
 **Note:** The different timestamp formats are intentional - Planner.log uses 4-digit years
-while update_*.log uses 2-digit years. Both represent the same calendar dates when parsed
-(e.g., 25.09.2025 and 25.09.25 both mean 25 September 2025).
+while update execution logs use 2-digit years. Both represent the same calendar dates when
+parsed (e.g., 25.09.2025 and 25.09.25 both mean 25 September 2025).
 
 ### Encoding
 

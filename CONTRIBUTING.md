@@ -345,7 +345,7 @@ Project Root/
        Success                = $true
        TargetVersion          = "11.02.186"
        UpdateTime             = [datetime]"2025-07-29 05:00:59"
-       UpdateLogPath          = "D:\MedocSRV\LOG\update_2025-07-29.log"
+       UpdateLogPath          = "D:\MedocSRV\LOG\update_2025-07-29.log"  # or update=PID_YYYY-MM-DD.log (multi-phase format)
        MarkerVersionConfirm   = $true
        MarkerCompletionMarker = $true
        Reason                 = "Both markers confirmed"
@@ -1274,13 +1274,14 @@ function Test-UpdateOperationSuccess {
         Finds and validates latest M.E.Doc update operation in dual logs.
 
     .DESCRIPTION
-        Analyzes both Planner.log and update_YYYY-MM-DD.log files to detect
+        Analyzes both Planner.log and update log files (update_YYYY-MM-DD.log
+        or multi-phase update=PID_YYYY-MM-DD.log) to detect
         and validate successful update completion via three-phase validation
         (infrastructure ready, service restarted, version confirmed).
 
     .PARAMETER MedocLogsPath
         Path to the M.E.Doc logs directory containing Planner.log and
-        update_YYYY-MM-DD.log files.
+        update log files (update_YYYY-MM-DD.log or update=PID_YYYY-MM-DD.log).
 
     .PARAMETER EncodingCodePage
         Log file encoding code page (default: 1251 for Windows-1251/Cyrillic).
@@ -1290,7 +1291,7 @@ function Test-UpdateOperationSuccess {
         - Success: [bool] Update completed successfully with both markers
         - TargetVersion: [string] Updated version number (e.g., "11.02.186")
         - UpdateTime: [datetime] When update started in Planner.log
-        - UpdateLogPath: [string] Path to the update_YYYY-MM-DD.log file
+        - UpdateLogPath: [string] Path to the update log file (update_YYYY-MM-DD.log or update=PID_YYYY-MM-DD.log)
         - MarkerVersionConfirm: [bool] Version marker found
         - MarkerCompletionMarker: [bool] Completion marker found
         - Reason: [string] Human-readable status message
@@ -1530,7 +1531,7 @@ Write-Host "All markers confirmed: $($result.MarkerVersionConfirm -and $result.M
 | No Updates | failure-no-update-detected | Status = "NoUpdate", ErrorId = NoUpdate (1001) |
 | Missing Version Marker | failure-missing-version-marker | Status = "Failed", Success = $false (version marker missing) |
 | Missing Completion Marker | failure-missing-completion-marker | Status = "Failed", Success = $false (completion marker missing) |
-| No Update Log | failure-no-update-log | Status = "NoUpdate" or "Failed" (no update_*.log file) |
+| No Update Log | failure-no-update-log | Status = "NoUpdate" or "Failed" (no update log file in either format) |
 
 ---
 
@@ -1601,7 +1602,7 @@ Before creating a release:
 ```powershell
 # 1. All tests passing
 ./tests/Run-Tests.ps1
-# Expected: 201 tests passing
+# Expected: all tests passing
 
 # 2. No uncommitted changes
 git status

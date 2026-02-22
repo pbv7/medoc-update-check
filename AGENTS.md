@@ -33,10 +33,15 @@ for contribution guidelines.
 ## 2-Marker Update Detection System
 
 The system validates M.E.Doc server updates by checking for **2 critical markers** in the update logs.
+Since ~17.02.2026, M.E.Doc uses a multi-phase update format with separate log files per phase
+(`update=PID_YYYY-MM-DD.log` for Extraction, Self-update, Upgrade), replacing the older single-file
+format (`update_YYYY-MM-DD.log`). The `Find-UpdateLogFile` function handles discovery with fallback
+from old to new format.
 
 ### Core Concept
 
-Update success requires BOTH markers to be present in the update log:
+Update success requires BOTH markers to be present in the update log (whether single-file or
+multi-phase):
 
 - **Marker V (Version):** Pattern `Версія програми - {TARGET_VERSION}` confirms version matches expected
 - **Marker C (Completion):** Pattern `Завершення роботи, операція "Оновлення"` confirms operation finished
@@ -63,7 +68,7 @@ When logs contain multiple updates, the system searches **backward from end of l
 
 - **Pattern:** `Версія програми - {TARGET_VERSION}`
 - **Example:** `Версія програми - 186` confirms v11.02.186
-- **Location:** Final section of update_*.log files
+- **Location:** Final section of update log files (`update_*.log` or `update=PID_*.log`)
 - **Reliability:** Consistently present in successful updates, absent in failures
 
 ### Marker C: Update Operation Completion
@@ -105,7 +110,7 @@ medoc-update/
 ├── tests/
 │   ├── Run-Tests.ps1                # Test runner
 │   ├── MedocUpdateCheck.Tests.ps1   # Pester test cases
-│   └── test-data/                   # Dual-log test data (Windows-1251 encoded)
+│   └── test-data/                   # Test data (Windows-1251 encoded, single & multi-phase logs)
 ├── .github/
 │   └── workflows/
 │       └── tests.yml                # GitHub Actions CI/CD
@@ -134,8 +139,9 @@ Key points:
 - **NEVER** use removed PS7+ cmdlets: `Get-EventLog`, `Get-WmiObject`, `PSScheduledJob`
 - Use `$env:` variables for paths, never hardcode `C:\ProgramData`
 - All comments in English
-- **CRITICAL:** Planner.log uses 4-digit year regex (`\d{4}`), update_*.log uses 2-digit
-  (`\d{2}`)
+- **CRITICAL:** Planner.log uses 4-digit year regex (`\d{4}`), update log files use 2-digit
+  (`\d{2}`). Update logs may be `update_YYYY-MM-DD.log` (old) or `update=PID_YYYY-MM-DD.log`
+  (new multi-phase)
 
 ### 2. Testing
 

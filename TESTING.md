@@ -73,7 +73,11 @@ $config.ChatId
 
 ### 3. Test-UpdateOperationSuccess Function
 
-Test the update detection function with 2-marker validation (Planner.log + update_YYYY-MM-DD.log).
+Test the update detection function with 2-marker validation
+(Planner.log + update log). The update log may use the classic
+single-phase format (`update_YYYY-MM-DD.log`) or the newer multi-phase
+format (`update=PID_YYYY-MM-DD.log`). The `Find-UpdateLogFile` function
+handles discovery with fallback between formats.
 
 **Note:** All results return status objects with `Status` field and `ErrorId` (MedocEventId enum value):
 
@@ -235,7 +239,7 @@ Event Log entries and function return values.
 - **1000-1001**: Normal operation. Events appear regularly per schedule.
 - **1100-1199**: Config incomplete. Compare Config.ps1 with Config.template.ps1.
 - **1200-1299**: File access issues. Verify MedocLogsPath and ProgramData permissions.
-- **1302**: Update validation failed. Review M.E.Doc server logs (Planner.log and update_*.log).
+- **1302**: Update validation failed. Review M.E.Doc server logs (Planner.log and update log — either `update_*.log` or `update=PID_*.log`).
 - **1400-1401**: Telegram issues. Verify bot token, chat ID, and network connectivity.
 - **1500+**: Disk space or permission issues. Check ProgramData directory.
 
@@ -761,10 +765,9 @@ Windows APIs.
 
 **Current Status:**
 
-- ✅ 237 tests passing on Windows CI
-- ❌ 3 tests failing on Windows CI (known Pester limitation - see below)
-- ✅ 236 tests passing on macOS/Linux
-- ⏭️ 2 tests skipped on non-Windows (intentional, documented)
+- Run `./tests/Run-Tests.ps1` for current pass/fail/skip counts on your platform.
+- Some Windows-specific tests are intentionally skipped on non-Windows platforms.
+- Three Windows CI failures are currently known (Pester limitation documented below).
 
 #### Known Issues: Pester InModuleScope Mocking on Windows
 
@@ -1019,6 +1022,9 @@ Test data directories are provided in `tests/test-data/`. Each contains M.E.Doc 
 - **failure-missing-completion-marker** - Completion marker missing (operation incomplete)
 - **failure-no-update-detected** - No update operation found in logs
 - **failure-no-update-log** - Planner shows update trigger but update_*.log file is missing (treated as FAILED)
+- **success-new-format** - Update completes using the multi-phase log format (`update=PID_YYYY-MM-DD.log`)
+- **success-new-format-with-extraction** - Multi-phase update with extraction step
+- **success-new-format-multiple-files** - Multi-phase update producing multiple log files
 
 These directories use realistic M.E.Doc log format with Windows-1251 encoding and Ukrainian
 messages. See `tests/test-data/README.md` for detailed documentation of each scenario.
@@ -1272,7 +1278,7 @@ The project has comprehensive automated test coverage. Run tests to verify:
 | **Error Handling** | 2 | ✅ Good | Missing files and error scenarios |
 | **Write-EventLogEntry** | 2 | ⚠️ Fair | Basic parameter validation |
 | **Module Exports** | 5 | ✅ Good | All 6 functions exported (including Format-* functions) |
-| **Timestamp Regex Pattern Validation** | 3 | ✅ Excellent | 4-digit year (Planner.log), 2-digit year (update_*.log), format distinction |
+| **Timestamp Regex Pattern Validation** | 3 | ✅ Excellent | 4-digit year (Planner.log), 2-digit year (update_*.log / update=PID_*.log), format distinction |
 | **Timestamp Format Handling** | 3 | ✅ Excellent | Milliseconds, log ID/level handling, line iteration |
 | **Timestamp Edge Cases** | 3 | ✅ Excellent | Single-line files, UpdateTime consistency, checkpoint filtering |
 | **Misc/Integration** | 27 | ✅ Excellent | Combined scenario testing, Invoke-MedocUpdateCheck |
@@ -1456,7 +1462,7 @@ Run `./tests/Run-Tests.ps1` to see current metrics. Focus on production code (li
 
 2. **Timestamp Regex Pattern Validation** (9 tests)
    - Planner.log with 4-digit year format (DD.MM.YYYY)
-   - update_*.log with 2-digit year format (DD.MM.YY)
+   - update_*.log / update=PID_*.log with 2-digit year format (DD.MM.YY)
    - Distinction between different timestamp formats
    - Milliseconds handling in update_*.log
    - Log ID and INFO level parsing
@@ -1507,7 +1513,7 @@ Run `./tests/Run-Tests.ps1` to see current metrics. Focus on production code (li
 
 **Integration Tests:** 15/72 (21%)
 
-- Dual-log scenario testing (success, failure, missing flags, timeout)
+- Dual-log scenario testing (success, failure, missing flags, timeout) — covers both single-phase and multi-phase log formats
 - Multi-function workflows
 - Configuration validation
 - Module exports
@@ -1590,7 +1596,7 @@ Version: 11.02.183 → 11.02.184
 Started: 28.10.2025 11:32:14
 Failed at: 28.10.2025 11:47:15
 Markers: ✗ Version (V), ✓ Completion (C)
-Reason: Missing version confirmation in update log
+Reason: Missing version confirmation in update log (update_*.log or update=PID_*.log)
 Checked: 28.10.2025 11:50:06
 ```
 
@@ -1649,7 +1655,7 @@ The module uses a centralized enum for event categorization. Use these IDs when 
 | **Configuration** | 1100 | `ConfigMissingKey` | Configuration key missing |
 | **Configuration** | 1101 | `ConfigInvalidValue` | Configuration value invalid |
 | **Environment** | 1200 | `PlannerLogMissing` | Planner.log not found |
-| **Environment** | 1201 | `UpdateLogMissing` | update_YYYY-MM-DD.log not found |
+| **Environment** | 1201 | `UpdateLogMissing` | Update log not found (neither `update_YYYY-MM-DD.log` nor `update=PID_YYYY-MM-DD.log`) |
 | **Environment** | 1202 | `LogsDirectoryMissing` | Logs directory not found |
 | **Environment** | 1203 | `CheckpointDirCreationFailed` | Failed to create checkpoint directory |
 | **Environment** | 1204 | `EncodingError` | Error reading logs with Windows-1251 encoding |
@@ -1798,7 +1804,7 @@ Version: 11.02.185 → 11.02.186
 Started: 23.10.2025 05:00:00
 Failed at: 23.10.2025 05:25:15
 Markers: ✗ Version (V), ✓ Completion (C)
-Reason: Missing version confirmation in update log
+Reason: Missing version confirmation in update log (update_*.log or update=PID_*.log)
 Checked: 28.10.2025 22:33:26
 ```
 
@@ -2053,13 +2059,15 @@ Message: "No update detected since last check at 28.10.2025 22:33:26"
 
 ### Scenario 3: Update Failed - Missing Success Flag
 
-**Setup:** Server has update log but validation failed
+**Setup:** Server has update log (either `update_*.log` or `update=PID_*.log`) but validation failed
 
 **Steps:**
 
 1. Run update check
 2. Function finds update entry in Planner.log
-3. Finds corresponding update_YYYY-MM-DD.log
+3. Finds corresponding update log via `Find-UpdateLogFile`
+   (checks `update_YYYY-MM-DD.log` classic format first,
+   falls back to `update=PID_YYYY-MM-DD.log` new format)
 4. Checks for 2 critical markers:
    - ✅ Marker V found: Version confirmation present
    - ✅ Marker C found: Completion marker present
@@ -2160,7 +2168,7 @@ The function distinguishes between warnings (non-critical) and errors (critical 
 | 1101 | ConfigInvalidValue | Invalid config parameter | Fix the value |
 | 1202 | LogsDirectoryMissing | M.E.Doc path not found | Verify installation path |
 | 1203 | CheckpointDirCreationFailed | Can't write checkpoint | Check disk permissions |
-| 1302 | Failed | Missing required markers | Check update logs for V and C markers |
+| 1302 | Failed | Missing required markers | Check update logs (`update_*.log` or `update=PID_*.log`) for V and C markers |
 | 1400 | TelegramAPIError | Telegram API rejected message | Check bot token, chat ID |
 | 1401 | TelegramSendError | Network error sending message | Check internet connection |
 
