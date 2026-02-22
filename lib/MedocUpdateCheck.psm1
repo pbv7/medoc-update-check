@@ -29,7 +29,7 @@ enum MedocEventId {
 
     # 1200-1299: Environment/filesystem errors
     PlannerLogMissing = 1200                # ❌ Planner.log not found
-    UpdateLogMissing = 1201                 # ❌ update_YYYY-MM-DD.log not found
+    UpdateLogMissing = 1201                 # ❌ update log not found (update_YYYY-MM-DD.log or update=PID_YYYY-MM-DD.log)
     LogsDirectoryMissing = 1202             # ❌ M.E.Doc logs directory not found
     CheckpointDirCreationFailed = 1203      # ❌ Checkpoint directory creation failed
     EncodingError = 1204                    # ❌ Encoding error reading logs
@@ -426,10 +426,93 @@ function Test-UpdateState {
     }
 }
 
+function Find-UpdateLogFile {
+    <#
+    .SYNOPSIS
+        Discovers the correct update log file for a given date, supporting both old and new formats
+
+    .DESCRIPTION
+        M.E.Doc update logs changed from single-phase to multi-phase format around 17.02.2026.
+        Old format: update_YYYY-MM-DD.log (single file with all phases)
+        New format: update=PID_YYYY-MM-DD.log (separate file per phase)
+
+        Discovery logic:
+        1. Try update_YYYY-MM-DD.log (old format) - if it contains the "Оновлення" operation
+           (not just "Розпакування"), return it as "classic" format
+        2. If old file is missing OR only has extraction phase: search for update=*_YYYY-MM-DD.log
+        3. Among new-format matches, find the one containing 'Початок роботи, операція "Оновлення"'
+           (exact match - not "Оновлення update.exe")
+        4. Return $null if no suitable file found
+
+    .PARAMETER MedocLogsPath
+        Directory containing M.E.Doc log files
+
+    .PARAMETER UpdateLogDate
+        Date string in YYYY-MM-DD format
+
+    .PARAMETER Encoding
+        System.Text.Encoding object for reading log files
+
+    .OUTPUTS
+        Hashtable @{ Path = [string]; Format = "classic" | "new" } or $null if not found
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$MedocLogsPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$UpdateLogDate,
+
+        [Parameter(Mandatory = $true)]
+        [System.Text.Encoding]$Encoding
+    )
+
+    # Regex pattern to match the Upgrade phase "Оновлення" operation specifically,
+    # excluding the self-update phase "Оновлення update.exe".
+    # Uses negative lookahead to reject "Оновлення update.exe" while accepting "Оновлення".
+    $upgradeOperationPattern = 'операція "Оновлення(?! update\.exe)"'
+
+    # Step 1: Try classic format (update_YYYY-MM-DD.log)
+    $classicPath = Join-Path $MedocLogsPath "update_$UpdateLogDate.log"
+    if (Test-Path $classicPath) {
+        try {
+            $content = Get-Content $classicPath -Encoding $Encoding -Raw
+            # Check if this file contains the actual Upgrade operation (not just Розпакування)
+            if ($content -match $upgradeOperationPattern) {
+                return @{ Path = $classicPath; Format = "classic" }
+            }
+        } catch {
+            # If we can't read the classic file, fall through to new format search
+        }
+    }
+
+    # Step 2: Search for new format files (update=PID_YYYY-MM-DD.log)
+    $newFormatFiles = @(Get-ChildItem -Path $MedocLogsPath -Filter "update=*_$UpdateLogDate.log" -File -ErrorAction SilentlyContinue)
+
+    if ($newFormatFiles.Count -eq 0) {
+        return $null
+    }
+
+    # Step 3: Find the file containing the Upgrade phase operation
+    foreach ($file in $newFormatFiles) {
+        try {
+            $content = Get-Content $file.FullName -Encoding $Encoding -Raw
+            if ($content -match $upgradeOperationPattern) {
+                return @{ Path = $file.FullName; Format = "new" }
+            }
+        } catch {
+            continue
+        }
+    }
+
+    return $null
+}
+
 function Test-UpdateOperationSuccess {
     <#
     .SYNOPSIS
-        Detects M.E.Doc update in Planner.log and validates success via update_YYYY-MM-DD.log
+        Detects M.E.Doc update in Planner.log and validates success via update log file
+        (supports both update_YYYY-MM-DD.log and update=PID_YYYY-MM-DD.log formats)
 
     .PARAMETER MedocLogsPath
         Directory containing Planner.log and update_YYYY-MM-DD.log files
@@ -573,13 +656,13 @@ function Test-UpdateOperationSuccess {
         }
     }
 
-    # Phase 2: Locate update_YYYY-MM-DD.log file
+    # Phase 2: Locate update log file (supports both old and new formats)
     $updateLogDate = $updateTime.ToString('yyyy-MM-dd')
-    $updateLogPath = Join-Path $MedocLogsPath "update_$updateLogDate.log"
+    $logFileResult = Find-UpdateLogFile -MedocLogsPath $MedocLogsPath -UpdateLogDate $updateLogDate -Encoding $Encoding
 
-    # Check if update log exists
-    if (-not (Test-Path $updateLogPath)) {
-        # Log file missing = FAILURE
+    if (-not $logFileResult) {
+        # No suitable update log found in either format = FAILURE
+        $updateLogPath = Join-Path $MedocLogsPath "update_$updateLogDate.log"
         return @{
             Status               = "Failed"
             ErrorId              = [MedocEventId]::UpdateLogMissing
@@ -598,6 +681,8 @@ function Test-UpdateOperationSuccess {
             Reason                 = "Update log file not found (validation skipped because update log is missing)"
         }
     }
+
+    $updateLogPath = $logFileResult.Path
 
     # Phase 3: Parse update log and check for 3 success flags
     # IMPORTANT DISTINCTION: update_*.log uses 2-digit year format (DD.MM.YY)
@@ -1130,6 +1215,7 @@ Export-ModuleMember -Function @(
     "Get-VersionInfo",
     "Format-UpdateTelegramMessage",
     "Format-UpdateEventLogMessage",
+    "Find-UpdateLogFile",
     "Find-LastUpdateOperation",
     "Test-UpdateMarker",
     "Test-UpdateState",

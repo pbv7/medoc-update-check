@@ -83,14 +83,16 @@ Cyrillic log support).
 
 ### Test Data Structure
 
-Each test scenario consists of a directory with `Planner.log` and optionally `update_YYYY-MM-DD.log`:
+Each test scenario consists of a directory with `Planner.log` and optionally
+`update_YYYY-MM-DD.log` (legacy single-phase format) or
+`update=PID_YYYY-MM-DD.log` (multi-phase format since 17.02.2026):
 
 ```text
 success-both-markers/                  - Both V and C markers present → SUCCESS
 failure-missing-version-marker/        - C present, V missing → FAILED
 failure-missing-completion-marker/     - V present, C missing (incomplete) → FAILED
 failure-no-update-detected/            - No operation found → NO UPDATE
-failure-no-update-log/                 - Planner shows update, update log missing → FAILED (UpdateLogMissing)
+failure-no-update-log/                 - Planner shows update, no update log found (neither update_*.log nor update=*_*.log) → FAILED (UpdateLogMissing)
 ```
 
 ### If Modifying Test Data
@@ -103,7 +105,7 @@ failure-no-update-log/                 - Planner shows update, update log missin
    [System.IO.File]::WriteAllBytes($Path, $encoding.GetBytes($text))
    ```
 
-2. Include both Planner.log and update_*.log for functional tests
+2. Include both Planner.log and update log(s) (`update_*.log` or `update=*_*.log`) for functional tests
 3. Ensure Cyrillic characters are properly encoded
 4. Re-run tests to verify: `./tests/Run-Tests.ps1`
 
@@ -142,7 +144,7 @@ The `AfterAll` block in `tests/MedocUpdateCheck.Tests.ps1` automatically removes
 
 - All `checkpoint-*.txt` files generated during test execution
 - Recursively from all test-data subdirectories
-- Preserves actual test fixtures (`Planner.log`, `update_*.log` files)
+- Preserves actual test fixtures (`Planner.log`, `update_*.log` and `update=*_*.log` files)
 
 ### When Adding New Tests
 
@@ -260,7 +262,7 @@ All `MedocEventId` enum members can be referenced:
 [MedocEventId]::ConfigMissingKey            # 1100 - Missing config key
 [MedocEventId]::ConfigInvalidValue          # 1101 - Invalid config value
 [MedocEventId]::PlannerLogMissing           # 1200 - Planner.log not found
-[MedocEventId]::UpdateLogMissing            # 1201 - update_*.log not found
+[MedocEventId]::UpdateLogMissing            # 1201 - update log not found (neither update_*.log nor update=*_*.log)
 [MedocEventId]::LogsDirectoryMissing        # 1202 - Logs directory not found
 [MedocEventId]::CheckpointDirCreationFailed # 1203 - Checkpoint dir creation failed
 [MedocEventId]::EncodingError               # 1204 - Encoding error reading logs

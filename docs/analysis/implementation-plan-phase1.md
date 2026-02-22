@@ -10,7 +10,10 @@ Summary of the refactor from a 3-flag model to the 2-marker model used in code a
 
 ## Key Helpers (Public)
 
-- **Find-LastUpdateOperation** — Extracts the last operation block from `update_*.log`.
+- **Find-UpdateLogFile** — Discovers the update log file, supporting both
+  legacy `update_YYYY-MM-DD.log` and multi-phase `update=PID_YYYY-MM-DD.log`
+  formats with fallback.
+- **Find-LastUpdateOperation** — Extracts the last operation block from the discovered update log.
 - **Test-UpdateMarker** — Checks marker presence inside an operation block:
   - VersionConfirm (V): `Версія програми - {TARGET_VERSION}`
   - CompletionMarker (C): `Завершення роботи, операція "Оновлення"`
@@ -22,10 +25,10 @@ Summary of the refactor from a 3-flag model to the 2-marker model used in code a
 
 - **Test-UpdateOperationSuccess**
   - Detects update trigger in Planner.log (4-digit year).
-  - Reads corresponding `update_YYYY-MM-DD.log` (2-digit year).
+  - Reads corresponding update log via `Find-UpdateLogFile` (`update_YYYY-MM-DD.log` or multi-phase `update=PID_YYYY-MM-DD.log`, 2-digit year).
   - Uses `Test-UpdateState` to classify:
     - Success: both markers present.
-    - Failed: missing version marker, missing completion marker, or missing update log.
+    - Failed: missing version marker, missing completion marker, or missing update log (both naming formats checked).
     - NoUpdate: no update trigger in Planner.log.
   - Return shape includes: Status, ErrorId, Success (bool), versions, timestamps, MarkerVersionConfirm, MarkerCompletionMarker, OperationFound, Reason.
 
@@ -54,5 +57,5 @@ Summary of the refactor from a 3-flag model to the 2-marker model used in code a
   - Missing version marker
   - Missing completion marker / incomplete block
   - No update trigger
-  - Missing update log
+  - Missing update log (both `update_YYYY-MM-DD.log` and `update=PID_YYYY-MM-DD.log`)
 - Encoding error handling validated via mocked Get-Content failures.

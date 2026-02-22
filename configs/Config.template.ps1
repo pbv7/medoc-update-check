@@ -68,9 +68,10 @@ $config = @{
     # Display name for this server (auto-detected or explicit)
     ServerName = $serverName
 
-    # Path to M.E.Doc logs directory (contains Planner.log and update_YYYY-MM-DD.log)
+    # Path to M.E.Doc logs directory (contains Planner.log and update log files)
     # IMPORTANT: This must be the DIRECTORY, not a file path
-    # The system automatically searches for both Planner.log and update_YYYY-MM-DD.log in this directory
+    # The system automatically searches for Planner.log and update logs in this directory
+    # Supports both classic (update_YYYY-MM-DD.log) and new multi-phase (update=PID_YYYY-MM-DD.log) formats
     MedocLogsPath = "D:\MedocSRV\LOG"
 
     # Telegram Bot API token (from encrypted credentials file)

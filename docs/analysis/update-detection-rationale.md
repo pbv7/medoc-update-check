@@ -15,7 +15,7 @@ This document captures the reasoning behind the 2-marker validation model for M.
 
 ## Search Strategy (Last Operation Only)
 
-1. Search backward in `update_*.log` for the completion marker (C).
+1. Search backward in the update log (`update_YYYY-MM-DD.log` or multi-phase `update=PID_YYYY-MM-DD.log`) for the completion marker (C).
 2. From that point, search backward for the start marker (`Початок роботи, операція "Оновлення"`).
 3. Extract the block between start/end markers and evaluate markers V and C inside that block.
 4. If completion marker is missing → Failed (operation incomplete).
@@ -31,6 +31,9 @@ This document captures the reasoning behind the 2-marker validation model for M.
 
 - Logs use Windows-1251 (Cyrillic). Wrong encoding yields false negatives → treat as `EncodingError`.
 - Planner timestamps use 4-digit year (`dd.MM.yyyy`); update logs use 2-digit year (`dd.MM.yy`).
+- Since ~17.02.2026, update logs may use multi-phase naming
+  (`update=PID_YYYY-MM-DD.log`); `Find-UpdateLogFile` discovers the correct
+  file with fallback to the legacy `update_YYYY-MM-DD.log` format.
 
 ## Event IDs (Relevant Range)
 
@@ -42,5 +45,7 @@ This document captures the reasoning behind the 2-marker validation model for M.
 ## Outcomes in Practice
 
 - **Success:** Both markers found in last operation block.
-- **Failed:** Any marker missing in the last operation block, or update log missing.
+- **Failed:** Any marker missing in the last operation block,
+  or update log missing (checked for both `update_YYYY-MM-DD.log`
+  and `update=PID_YYYY-MM-DD.log` formats).
 - **NoUpdate:** No update trigger found in Planner.log (nothing to evaluate).*** End Patch

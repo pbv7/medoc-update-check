@@ -693,7 +693,9 @@ Describe "Error Handling and Edge Cases" {
             $result.ErrorId | Should -Be ([MedocEventId]::EncodingError)
         }
 
-        It "Should surface encoding errors for update log" {
+        It "Should treat unreadable update log as missing when no fallback available" {
+            # When Find-UpdateLogFile can't read the classic file, it falls through to
+            # search for new-format files. If none found, the result is UpdateLogMissing.
             $logsDir = Join-Path $script:testDataDir "success-both-markers"
             $updateLogPath = Join-Path $logsDir "update_2025-10-23.log"
 
@@ -701,8 +703,8 @@ Describe "Error Handling and Edge Cases" {
 
             $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir -ErrorAction SilentlyContinue
 
-            $result.Status | Should -Be "Error"
-            $result.ErrorId | Should -Be ([MedocEventId]::EncodingError)
+            $result.Status | Should -Be "Failed"
+            $result.ErrorId | Should -Be ([MedocEventId]::UpdateLogMissing)
         }
     }
 
@@ -2180,6 +2182,157 @@ Describe "Integration Tests - Comprehensive Marker-Based Detection Scenarios" {
         }
     }
 }
+Describe "Find-UpdateLogFile - Update Log Discovery with Format Fallback" {
+
+    BeforeAll {
+        $script:encoding1251 = [System.Text.Encoding]::GetEncoding(1251)
+    }
+
+    Context "Classic format (old-style update_YYYY-MM-DD.log)" {
+        It "Should find classic format file when it contains the Upgrade operation" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Find-UpdateLogFile -MedocLogsPath $logsDir -UpdateLogDate "2025-10-23" -Encoding $script:encoding1251
+
+            $result | Should -Not -BeNullOrEmpty
+            $result.Format | Should -Be "classic"
+            $result.Path | Should -Match "update_2025-10-23\.log$"
+        }
+    }
+
+    Context "New format (update=PID_YYYY-MM-DD.log)" {
+        It "Should find new format file when no classic file exists" {
+            $logsDir = Join-Path $script:testDataDir "success-new-format"
+            $result = Find-UpdateLogFile -MedocLogsPath $logsDir -UpdateLogDate "2025-10-23" -Encoding $script:encoding1251
+
+            $result | Should -Not -BeNullOrEmpty
+            $result.Format | Should -Be "new"
+            $result.Path | Should -Match "update=12345_2025-10-23\.log$"
+        }
+
+        It "Should find new format file when classic file only has extraction phase" {
+            $logsDir = Join-Path $script:testDataDir "success-new-format-with-extraction"
+            $result = Find-UpdateLogFile -MedocLogsPath $logsDir -UpdateLogDate "2025-10-23" -Encoding $script:encoding1251
+
+            $result | Should -Not -BeNullOrEmpty
+            $result.Format | Should -Be "new"
+            $result.Path | Should -Match "update=12345_2025-10-23\.log$"
+        }
+    }
+
+    Context "Multiple new-format files" {
+        It "Should select the Upgrade phase file, not the self-update phase file" {
+            $logsDir = Join-Path $script:testDataDir "success-new-format-multiple-files"
+            $result = Find-UpdateLogFile -MedocLogsPath $logsDir -UpdateLogDate "2025-10-23" -Encoding $script:encoding1251
+
+            $result | Should -Not -BeNullOrEmpty
+            $result.Format | Should -Be "new"
+            # Should select update=22222 (Upgrade), not update=11111 (self-update)
+            $result.Path | Should -Match "update=22222_2025-10-23\.log$"
+        }
+    }
+
+    Context "No matching files" {
+        It "Should return null when no update log exists for the date" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-log"
+            $result = Find-UpdateLogFile -MedocLogsPath $logsDir -UpdateLogDate "2025-10-23" -Encoding $script:encoding1251
+
+            $result | Should -BeNullOrEmpty
+        }
+
+        It "Should return null when no update detected at all" {
+            $logsDir = Join-Path $script:testDataDir "failure-no-update-detected"
+            $result = Find-UpdateLogFile -MedocLogsPath $logsDir -UpdateLogDate "2099-01-01" -Encoding $script:encoding1251
+
+            $result | Should -BeNullOrEmpty
+        }
+    }
+}
+
+Describe "Test-UpdateOperationSuccess - New Log Format Integration" {
+
+    Context "New format: update=PID_YYYY-MM-DD.log (no classic file)" {
+        It "Should detect successful update from new format file" {
+            $logsDir = Join-Path $script:testDataDir "success-new-format"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.Status | Should -Be "Success"
+            $result.Success | Should -Be $true
+            $result.MarkerVersionConfirm | Should -Be $true
+            $result.MarkerCompletionMarker | Should -Be $true
+            $result.OperationFound | Should -Be $true
+        }
+
+        It "Should extract correct version information from new format" {
+            $logsDir = Join-Path $script:testDataDir "success-new-format"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.FromVersion | Should -Be "11.02.185"
+            $result.ToVersion | Should -Be "11.02.186"
+            $result.TargetVersion | Should -Be "186"
+        }
+
+        It "Should have update log path pointing to new format file" {
+            $logsDir = Join-Path $script:testDataDir "success-new-format"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.UpdateLogPath | Should -Match "update=12345_2025-10-23\.log$"
+        }
+    }
+
+    Context "Transitional format: old file has extraction, new file has upgrade" {
+        It "Should detect successful update from new format when old file only has extraction" {
+            $logsDir = Join-Path $script:testDataDir "success-new-format-with-extraction"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.Status | Should -Be "Success"
+            $result.Success | Should -Be $true
+            $result.MarkerVersionConfirm | Should -Be $true
+            $result.MarkerCompletionMarker | Should -Be $true
+        }
+
+        It "Should select the new format file over extraction-only classic file" {
+            $logsDir = Join-Path $script:testDataDir "success-new-format-with-extraction"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.UpdateLogPath | Should -Match "update=12345_2025-10-23\.log$"
+        }
+    }
+
+    Context "Multiple new-format files: correct phase selected" {
+        It "Should detect successful update when multiple new-format files exist" {
+            $logsDir = Join-Path $script:testDataDir "success-new-format-multiple-files"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.Status | Should -Be "Success"
+            $result.Success | Should -Be $true
+        }
+
+        It "Should select Upgrade phase file over self-update phase file" {
+            $logsDir = Join-Path $script:testDataDir "success-new-format-multiple-files"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.UpdateLogPath | Should -Match "update=22222_2025-10-23\.log$"
+        }
+    }
+
+    Context "Backward compatibility: classic format still works" {
+        It "Should still detect successful update from classic format" {
+            $logsDir = Join-Path $script:testDataDir "success-both-markers"
+            $result = Test-UpdateOperationSuccess -MedocLogsPath $logsDir
+
+            $result.Status | Should -Be "Success"
+            $result.Success | Should -Be $true
+            $result.UpdateLogPath | Should -Match "update_2025-10-23\.log$"
+        }
+    }
+}
+
+Describe "Module Exports - Find-UpdateLogFile" {
+    It "Should export Find-UpdateLogFile" {
+        (Get-Module MedocUpdateCheck).ExportedFunctions.Keys | Should -Contain "Find-UpdateLogFile"
+    }
+}
+
 AfterAll {
     Remove-Module MedocUpdateCheck -Force -ErrorAction SilentlyContinue
     if ($script:tempDirectories) {

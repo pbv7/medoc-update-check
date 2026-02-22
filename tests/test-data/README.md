@@ -63,7 +63,8 @@ M.E.Doc update detection uses a **2-marker validation system**:
 
 ### Core Concept
 
-The system validates update success by checking for **2 critical markers** in the update log:
+The system validates update success by checking for **2 critical markers** in the update log
+(either `update_YYYY-MM-DD.log` classic format or `update=PID_YYYY-MM-DD.log` new multi-phase format):
 
 - **Marker V (Version):** Pattern `Версія програми - {TARGET_VERSION}` confirms version matches
 - **Marker C (Completion):** Pattern `Завершення роботи, операція "Оновлення"` confirms operation finished
@@ -217,15 +218,89 @@ Planner.log → NO UPDATE. If update trigger exists but log missing → suspicio
 
 ---
 
+#### 6. `success-new-format/`
+
+**Status:** ✅ Update completed successfully (new multi-phase log format)
+
+**Files:**
+
+- `Planner.log` - Contains update trigger entry
+- `update=12345_2025-10-23.log` - New-format Upgrade phase log with both V and C markers
+- No `update_2025-10-23.log` file (old format not present)
+
+**Markers Present:**
+
+- **Marker V (Version):** `Версія програми - 186` ✓
+- **Marker C (Completion):** `Завершення роботи, операція "Оновлення"` ✓
+
+**Outcome:** SUCCESS (ErrorId=1000)
+
+**Use case:** Validate that `Find-UpdateLogFile` discovers the new
+`update=PID_YYYY-MM-DD.log` format when no classic file exists.
+This simulates the post-17.02.2026 behavior where M.E.Doc stopped
+creating `update_YYYY-MM-DD.log`.
+
+---
+
+#### 7. `success-new-format-with-extraction/`
+
+**Status:** ✅ Update completed successfully (transitional format)
+
+**Files:**
+
+- `Planner.log` - Contains update trigger entry
+- `update_2025-10-23.log` - Classic file with only extraction phase (`операція "Розпакування"`)
+- `update=12345_2025-10-23.log` - New-format Upgrade phase log with both V and C markers
+
+**Markers Present:**
+
+- **Marker V (Version):** `Версія програми - 186` ✓ (in new-format file)
+- **Marker C (Completion):** `Завершення роботи, операція "Оновлення"` ✓ (in new-format file)
+
+**Outcome:** SUCCESS (ErrorId=1000)
+
+**Use case:** Validate transitional period where old-format file exists
+but only contains extraction phase. `Find-UpdateLogFile` should skip
+the classic file (no Upgrade operation) and find the new-format file.
+
+---
+
+#### 8. `success-new-format-multiple-files/`
+
+**Status:** ✅ Update completed successfully (multiple new-format files)
+
+**Files:**
+
+- `Planner.log` - Contains update trigger entry
+- `update=11111_2025-10-23.log` - Self-update phase (`операція "Оновлення update.exe"`)
+- `update=22222_2025-10-23.log` - Upgrade phase with both V and C markers (`операція "Оновлення"`)
+
+**Markers Present:**
+
+- **Marker V (Version):** `Версія програми - 186` ✓ (in update=22222 file)
+- **Marker C (Completion):** `Завершення роботи, операція "Оновлення"` ✓ (in update=22222 file)
+
+**Outcome:** SUCCESS (ErrorId=1000)
+
+**Use case:** Validate that `Find-UpdateLogFile` correctly selects the
+Upgrade phase file among multiple `update=PID_YYYY-MM-DD.log` files.
+Must distinguish `операція "Оновлення"` from
+`операція "Оновлення update.exe"` using negative lookahead.
+
+---
+
 ### Test Coverage Summary
 
-**5 scenarios tested:**
+**8 scenarios tested:**
 
-1. ✅ **Success** - Both markers present (V✓ C✓)
+1. ✅ **Success** - Both markers present, classic format (V✓ C✓)
 2. ❌ **Failed - Missing Version** - Completion without version confirmation (V✗ C✓)
 3. ❌ **Failed - Missing Completion** - Incomplete operation (V✓/✗ C✗)
 4. ℹ️ **No Update** - No update entries in logs (no Planner update trigger)
 5. ❌ **No Update Log** - Update log file missing after Planner shows update trigger
+6. ✅ **Success - New Format** - Both markers present, new `update=PID` format only
+7. ✅ **Success - Transitional** - Classic file has extraction only, new format has upgrade
+8. ✅ **Success - Multiple Files** - Correct phase selected among multiple new-format files
 
 **Comprehensive outcomes validated:**
 
@@ -240,7 +315,7 @@ Planner.log → NO UPDATE. If update trigger exists but log missing → suspicio
 
 The system uses a **backward search** strategy to find the most recent update operation:
 
-1. **Start at end of update_*.log**
+1. **Start at end of update log** (classic `update_*.log` or new `update=*_*.log`)
 2. **Search backward** for completion marker: `Завершення роботи, операція "Оновлення"`
 3. **If found:** Record end position
 4. **Search backward** from that position for start marker: `Початок роботи, операція "Оновлення"`
@@ -266,7 +341,14 @@ Test data demonstrates correct timestamp parsing for both log types:
 - **Regex:** `\d{2}\.\d{2}\.\d{4}` (4-digit year)
 - **Content:** `Завантаження оновлення ezvit.11.02.185-11.02.186.upd`
 
-#### update_YYYY-MM-DD.log Format
+#### Update Log Format (both classic and new)
+
+Two filename patterns, same internal format:
+
+- **Classic:** `update_YYYY-MM-DD.log` (single file, all phases)
+- **New (since ~17.02.2026):** `update=PID_YYYY-MM-DD.log` (separate file per phase)
+
+Internal log line format (identical in both):
 
 - **Format:** `DD.MM.YY H:MM:SS.MMM {id} {level} {message}`
 - **Example:** `25.10.25 10:30:15.100 00000001 INFO Версія програми - 186`
@@ -346,7 +428,9 @@ When adding new test scenarios:
    - Use format: `DD.MM.YYYY H:MM:SS {message}`
    - Use actual M.E.Doc event text (e.g., `Завантаження оновлення ezvit.X.X.X-X.X.X.upd`)
 
-3. **Create update_YYYY-MM-DD.log** (if scenario requires):
+3. **Create update log file** (if scenario requires):
+   - Classic format: `update_YYYY-MM-DD.log`
+   - New multi-phase format: `update=PID_YYYY-MM-DD.log` (PID is a process ID number)
    - Use date from Planner.log entry
    - Include appropriate markers for scenario (V, C, both, or neither)
    - Use format: `DD.MM.YY H:MM:SS.MMM {id} {level} {message}`

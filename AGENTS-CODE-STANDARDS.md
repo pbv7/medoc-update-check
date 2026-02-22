@@ -436,7 +436,9 @@ wrong regex pattern will cause timestamp parsing to fail.
 ### Why Different Formats?
 
 - **Planner.log**: Planning/scheduler log (4-digit year: DD.MM.YYYY)
-- **update_*.log**: Execution/process log (2-digit year: DD.MM.YY)
+- **update_*.log** (legacy) / **update=PID_*.log** (multi-phase, since 17.02.2026):
+  Execution/process log (2-digit year: DD.MM.YY).
+  Use `Find-UpdateLogFile` for discovery with fallback.
 
 Different purposes = Different formats. This is not a bug; it's architectural.
 
@@ -451,10 +453,11 @@ if ($line -match '^(\d{2}\.\d{2}\.\d{4})\s+(\d{1,2}:\d{2}:\d{2})\s+(.+)$') {
 }
 ```
 
-**update_*.log:**
+**update_*.log / update=PID_*.log:**
 
 ```powershell
 # MUST match 2-digit year format (milliseconds are ignored in parsing)
+# Same format applies to both update_YYYY-MM-DD.log and update=PID_YYYY-MM-DD.log
 if ($line -match '^(\d{2}\.\d{2}\.\d{2})\s+(\d{1,2}:\d{2}:\d{2})') {
     # Parse with format: 'dd.MM.yy H:mm:ss'
 }
@@ -467,7 +470,7 @@ if ($line -match '^(\d{2}\.\d{2}\.\d{2})\s+(\d{1,2}:\d{2}:\d{2})') {
 - Regex: `\d{4}` ✅ matches 2025
 - Format: `dd.MM.yyyy` ✅ correct
 
-**update_*.log:**
+**update_*.log / update=PID_*.log:**
 `23.10.25 10:30:15.100 00000001 INFO    IsProcessCheckPassed DI: True, AI: True`
 
 - Regex: `\d{2}` ✅ matches 25 (= 2025)
@@ -477,7 +480,7 @@ if ($line -match '^(\d{2}\.\d{2}\.\d{2})\s+(\d{1,2}:\d{2}:\d{2})') {
 ### ❌ Common Mistakes
 
 ```powershell
-# WRONG: Using 4-digit regex on update_*.log (will not match!)
+# WRONG: Using 4-digit regex on update_*.log or update=PID_*.log (will not match!)
 if ($line -match '^\d{2}\.\d{2}\.\d{4}') { ... }  # ❌ Fails: "25.10.25" doesn't match \d{4}
 
 # WRONG: Using wrong DateTime format
@@ -492,11 +495,11 @@ if ($line -match '^\d{2}\.\d{2}\.\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}') { ... }  # �
 ```powershell
 # 1. Use correct regex for each log type
 # Planner.log: \d{4} for 4-digit year
-# update_*.log: \d{2} for 2-digit year
+# update_*.log / update=PID_*.log: \d{2} for 2-digit year
 
 # 2. Use correct DateTime format
 # Planner.log: 'dd.MM.yyyy H:mm:ss'
-# update_*.log: 'dd.MM.yy H:mm:ss' (milliseconds ignored)
+# update_*.log / update=PID_*.log: 'dd.MM.yy H:mm:ss' (milliseconds ignored)
 
 # 3. Test both formats
 # Run tests: ./tests/Run-Tests.ps1

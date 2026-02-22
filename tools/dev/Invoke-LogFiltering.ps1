@@ -9,7 +9,7 @@ This utility applies a series of regex patterns stored in cleanup-patterns.txt
 to M.E.Doc update log files, removing verbose/repetitive entries to reduce log
 file size while preserving lines relevant for update analysis.
 
-The tool processes all update_*.log files and produces:
+The tool processes all update_*.log and update=*.log files and produces:
 - Cleaned logs (reduced size, pattern lines removed)
 - Excluded lines archive (for recovery if needed)
 - Progress output showing lines kept/excluded per pattern
@@ -29,7 +29,7 @@ WORKFLOW:
 6. Display summary of total lines kept/excluded
 
 .PARAMETER SourceDir
-Directory containing original M.E.Doc update logs (update_*.log format).
+Directory containing original M.E.Doc update logs (update_*.log and update=*.log formats).
 Default: "logs/source" (relative to script directory)
 
 .PARAMETER OutputDir
@@ -180,10 +180,10 @@ New-Item -ItemType Directory -Path $ExcludedDir -Force | Out-Null
 
 # Copy source to output first
 Write-Host "Copying source files to output directory..." -ForegroundColor Yellow
-$sourceFiles = @(Get-ChildItem $SourceDir -Filter "update_*.log")
+$sourceFiles = @(Get-ChildItem $SourceDir -Filter "update_*.log") + @(Get-ChildItem $SourceDir -Filter "update=*.log")
 
 if ($sourceFiles.Count -eq 0) {
-    Write-Warning "No update_*.log files found in $SourceDir"
+    Write-Warning "No update_*.log or update=*.log files found in $SourceDir"
     return
 }
 
@@ -201,7 +201,7 @@ $combinedPattern = $patterns -join '|'
 Write-Host "Applying all patterns in a single pass for maximum efficiency..." -ForegroundColor Yellow
 Write-Host ""
 
-$files = Get-ChildItem $OutputDir -Filter "update_*.log"
+$files = @(Get-ChildItem $OutputDir -Filter "update_*.log") + @(Get-ChildItem $OutputDir -Filter "update=*.log")
 $totalKept = 0
 $totalExcluded = 0
 

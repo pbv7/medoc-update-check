@@ -20,6 +20,10 @@ Snapshot of the manual corpus analysis that informed the 2-marker model.
 - Successful logs consistently show both markers near the end of the file.
 - Completion-only without version, or version-only without completion, correlates with failed or incomplete updates.
 - No-update cases simply lack the update trigger in Planner.log and have no corresponding update log.
+- Since ~17.02.2026, M.E.Doc uses multi-phase updates with separate
+  `update=PID_YYYY-MM-DD.log` files per phase instead of a single
+  `update_YYYY-MM-DD.log`. The `Find-UpdateLogFile` function handles
+  discovery with fallback to the old format.
 
 ## How It Informed the Design
 

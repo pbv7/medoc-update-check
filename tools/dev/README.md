@@ -5,7 +5,8 @@ repetitive, or non-update-relevant entries.
 
 ## Overview
 
-These tools help developers analyze M.E.Doc server update logs more efficiently by:
+These tools help developers analyze M.E.Doc server update logs more efficiently. Both
+single-phase (`update_*.log`) and multi-phase (`update=*.log`) log formats are supported. Features:
 
 - **Reducing file sizes** - Remove verbose framework/infrastructure logging
 - **Focusing analysis** - Keep only lines relevant to update validation
@@ -64,7 +65,7 @@ tools/dev/
 
 ### Scenario A: Analyzing a New Production Log
 
-1. Place raw `update_*.log` files in `logs/source/`
+1. Place raw `update_*.log` or `update=*.log` files in `logs/source/`
 2. Run batch processing:
 
    ```powershell
@@ -117,7 +118,7 @@ Batch apply all patterns from the patterns library.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| SourceDir | logs/source | Directory with update_*.log files |
+| SourceDir | logs/source | Directory with `update_*.log` and `update=*.log` files |
 | OutputDir | logs/cleaned | Where to write cleaned logs |
 | ExcludedDir | logs/excluded | Archive of removed lines |
 | PatternsFile | patterns/cleanup-patterns.txt | Pattern library file |
@@ -385,9 +386,9 @@ Uses optimized **single-pass processing** by combining all patterns into a singl
 
 ### No logs found
 
-**Error:** "No update_*.log files found in logs/source/"
+**Error:** "No update_*.log or update=*.log files found in logs/source/"
 
-**Solution:** Place `update_*.log` files in the `logs/source/` directory
+**Solution:** Place `update_*.log` or `update=*.log` files in the `logs/source/` directory
 
 ### Pattern syntax error
 

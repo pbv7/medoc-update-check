@@ -31,7 +31,7 @@ Regex pattern to apply for filtering (required).
 Lines matching this pattern will be marked for removal.
 
 .PARAMETER SourceDir
-Directory containing original M.E.Doc update logs (update_*.log format).
+Directory containing original M.E.Doc update logs (update_*.log and update=*.log formats).
 Default: "logs/source" (relative to script directory)
 
 .PARAMETER CleanedDir
@@ -143,7 +143,7 @@ EXPECTED OUTPUT:
   Total lines excluded: 12540
 
 TROUBLESHOOTING:
-- If no logs found: Ensure logs/source/ contains update_*.log files
+- If no logs found: Ensure logs/source/ contains update_*.log or update=*.log files
 - If pattern syntax error: Test regex in PowerShell first
 - If too many lines removed: Pattern too broad - refine it
 - If too few lines removed: Pattern too narrow - make it more general
@@ -198,8 +198,8 @@ New-Item -ItemType Directory -Path $ExcludedDir -Force | Out-Null
 New-Item -ItemType Directory -Path (Split-Path $PatternsFile) -Force | Out-Null
 
 # Initialize cleaned directory from source if first run
-$cleanedFiles = @(Get-ChildItem $CleanedDir -Filter "update_*.log" -ErrorAction SilentlyContinue)
-$sourceFiles = @(Get-ChildItem $SourceDir -Filter "update_*.log")
+$cleanedFiles = @(Get-ChildItem $CleanedDir -Filter "update_*.log" -ErrorAction SilentlyContinue) + @(Get-ChildItem $CleanedDir -Filter "update=*.log" -ErrorAction SilentlyContinue)
+$sourceFiles = @(Get-ChildItem $SourceDir -Filter "update_*.log") + @(Get-ChildItem $SourceDir -Filter "update=*.log")
 
 if ($cleanedFiles.Count -eq 0 -and $sourceFiles.Count -gt 0) {
     Write-Host "First run detected: Copying source files to cleaned directory..." -ForegroundColor Yellow
@@ -233,10 +233,10 @@ if ($Pattern -cin $existingPatterns) {
 # This preserves user intent for patterns with significant leading/trailing whitespace
 Add-Content -Path $PatternsFile -Value $Pattern -Encoding utf8
 
-$files = Get-ChildItem $CleanedDir -Filter "update_*.log"
+$files = @(Get-ChildItem $CleanedDir -Filter "update_*.log") + @(Get-ChildItem $CleanedDir -Filter "update=*.log")
 
 if ($files.Count -eq 0) {
-    Write-Warning "No 'update_*.log' files found in '$CleanedDir' to process. The pattern will be saved without being tested."
+    Write-Warning "No 'update_*.log' or 'update=*.log' files found in '$CleanedDir' to process. The pattern will be saved without being tested."
     Write-Host ""
     Write-Host "✅ Pattern saved to: $PatternsFile" -ForegroundColor Green
     Write-Host "Run the script again after adding log files to test the pattern." -ForegroundColor Cyan

@@ -686,7 +686,7 @@ Event IDs are organized by category for easy filtering and monitoring in Windows
 | ID | Level | Scenario | Meaning | Action |
 |---|---|---|---|---|
 | **1200** | Error | ❌ Planner.log Missing | Planner.log not found in M.E.Doc logs directory | Verify MedocLogsPath in config |
-| **1201** | Error | ❌ Update Log Missing | update_YYYY-MM-DD.log not found after update trigger | Check M.E.Doc logs directory |
+| **1201** | Error | ❌ Update Log Missing | Update log not found (neither update_YYYY-MM-DD.log nor update=PID_YYYY-MM-DD.log) after update trigger | Check M.E.Doc logs directory |
 | **1202** | Error | ❌ Logs Dir Missing | M.E.Doc logs directory not found | Verify MedocLogsPath in config |
 | **1203** | Error | ❌ Checkpoint Dir Failed | Cannot create checkpoint directory in ProgramData | Check ProgramData permissions |
 | **1204** | Error | ❌ Encoding Error | Error reading logs with configured encoding | Verify EncodingCodePage setting |
@@ -695,7 +695,7 @@ Event IDs are organized by category for easy filtering and monitoring in Windows
 
 | ID | Level | Scenario | Meaning | Action |
 |---|---|---|---|---|
-| **1302** | Error | ❌ Failed | Update validation failed (missing markers) | Verify update log contains both version and completion markers |
+| **1302** | Error | ❌ Failed | Update validation failed (missing markers) | Verify update log (update_YYYY-MM-DD.log or update=PID_YYYY-MM-DD.log) contains both version and completion markers |
 
 #### Notification Errors (1400-1499)
 
@@ -733,7 +733,7 @@ Configuration errors (1100-1199):
 Filesystem errors (1200-1299):
 
 - **1200** - Planner.log missing: Verify MedocLogsPath in config
-- **1201** - Update log missing: Check M.E.Doc logs directory
+- **1201** - Update log missing (neither update_YYYY-MM-DD.log nor update=PID_YYYY-MM-DD.log found): Check M.E.Doc logs directory
 - **1202** - Logs directory missing: Verify MedocLogsPath in config
 - **1203** - Checkpoint dir creation failed: Check ProgramData permissions
 - **1204** - Encoding error: Verify EncodingCodePage setting
